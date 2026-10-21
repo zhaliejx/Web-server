@@ -1,0 +1,387 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ── Ajest dark theme (Crunchyroll-inspired: deep charcoal + ember orange) ── */
+:root,
+.dark {
+  --radius: 0.75rem;
+  --background: #0b0d12;
+  --foreground: #f2f4f8;
+  --card: #14171f;
+  --card-foreground: #f2f4f8;
+  --popover: #171b24;
+  --popover-foreground: #f2f4f8;
+  --primary: #ff7a1a;
+  --primary-foreground: #0b0d12;
+  --secondary: #1c212c;
+  --secondary-foreground: #e6e9f0;
+  --muted: #171b24;
+  --muted-foreground: #9aa3b2;
+  --accent: #212736;
+  --accent-foreground: #ffb37a;
+  --destructive: #e5484d;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.1);
+  --ring: #ff7a1a;
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+  overscroll-behavior-y: none;
+}
+
+body {
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+::selection {
+  background: rgba(255, 122, 26, 0.35);
+}
+
+/* ── Scrollbars ────────────────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a3040 transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #2a3040;
+  border-radius: 8px;
+  border: 2px solid #0b0d12;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #39415a;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   SPLASH — pure SVG/CSS cinematic startup
+   ════════════════════════════════════════════════════════════════════════════ */
+.aj-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse 80% 55% at 50% 38%, rgba(255, 122, 26, 0.09), transparent 65%),
+    radial-gradient(ellipse 60% 45% at 50% 105%, rgba(244, 81, 30, 0.1), transparent 60%),
+    #0b0d12;
+  transition: opacity 0.7s ease, transform 0.7s ease, filter 0.7s ease;
+}
+.aj-splash-exit {
+  opacity: 0;
+  transform: scale(1.06);
+  filter: blur(6px);
+  pointer-events: none;
+}
+.aj-splash-glow {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(90px);
+  opacity: 0.5;
+  animation: aj-breathe 5s ease-in-out infinite;
+}
+.aj-splash-glow-1 {
+  width: 420px;
+  height: 420px;
+  top: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(circle, rgba(255, 122, 26, 0.22), transparent 70%);
+}
+.aj-splash-glow-2 {
+  width: 320px;
+  height: 320px;
+  bottom: 6%;
+  right: 12%;
+  background: radial-gradient(circle, rgba(255, 179, 122, 0.1), transparent 70%);
+  animation-delay: 2s;
+}
+.aj-splash-core {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  position: relative;
+  z-index: 2;
+}
+.aj-splash-logo {
+  filter: drop-shadow(0 0 26px rgba(255, 122, 26, 0.45));
+}
+
+/* Logo stroke draw-on (SVG stroke-dash) */
+.aj-draw {
+  stroke-dasharray: 240;
+  stroke-dashoffset: 240;
+  animation: aj-draw-in 1.15s cubic-bezier(0.65, 0, 0.35, 1) forwards, aj-fill-in 0.7s ease 1s forwards;
+}
+.aj-draw-2 {
+  animation-delay: 0.85s, 1.55s;
+}
+.aj-pop {
+  transform: scale(0);
+  animation: aj-pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 1.7s forwards;
+}
+@keyframes aj-draw-in {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes aj-fill-in {
+  to {
+    fill-opacity: 1;
+  }
+}
+@keyframes aj-pop-in {
+  to {
+    transform: scale(1);
+  }
+}
+
+/* Wordmark letters stagger */
+.aj-splash-word {
+  display: flex;
+  gap: 0.32em;
+  margin-top: 1.4rem;
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+}
+.aj-splash-letter {
+  opacity: 0;
+  transform: translateY(14px);
+  animation: aj-letter-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  background: linear-gradient(180deg, #ffffff 30%, #ffb37a 130%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+@keyframes aj-letter-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.aj-splash-tagline {
+  margin-top: 0.55rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: #9aa3b2;
+  opacity: 0;
+  animation: aj-fade-up 0.6s ease 1.5s forwards;
+}
+
+/* Loading bar */
+.aj-splash-bar {
+  width: 250px;
+  height: 3px;
+  margin-top: 2.1rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+  opacity: 0;
+  animation: aj-fade-up 0.6s ease 1.7s forwards;
+}
+.aj-splash-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #ff7a1a, #ffb347, #ff7a1a);
+  background-size: 200% 100%;
+  animation: aj-shimmer 1.2s linear infinite;
+  transition: width 0.18s ease-out;
+}
+@keyframes aj-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.aj-splash-status {
+  margin-top: 0.9rem;
+  font-size: 0.82rem;
+  color: #9aa3b2;
+  animation: aj-status-in 0.35s ease;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+@keyframes aj-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.aj-splash-dots::after {
+  content: '';
+  animation: aj-dots 1.4s steps(4, end) infinite;
+}
+@keyframes aj-dots {
+  0% { content: ''; }
+  25% { content: '.'; }
+  50% { content: '..'; }
+  75% { content: '...'; }
+}
+
+/* Service rows */
+.aj-splash-services {
+  margin-top: 1.35rem;
+  width: 268px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  opacity: 0;
+  animation: aj-fade-up 0.6s ease 1.9s forwards;
+}
+.aj-splash-services li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: #8a93a6;
+  letter-spacing: 0.04em;
+  padding: 0.28rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.aj-splash-svc-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+}
+.aj-splash-svc-state.is-wait { color: #9aa3b2; }
+.aj-splash-svc-state.is-ok { color: #4ade80; background: rgba(74, 222, 128, 0.12); }
+.aj-splash-svc-state.is-fail { color: #f87171; background: rgba(248, 113, 113, 0.12); }
+.aj-splash-foot {
+  position: absolute;
+  bottom: 1.6rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #4a5164;
+}
+
+@keyframes aj-fade-up {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes aj-breathe {
+  0%, 100% { opacity: 0.5; transform: translateX(-50%) scale(1); }
+  50% { opacity: 0.85; transform: translateX(-50%) scale(1.08); }
+}
+
+/* ── Shared bits ───────────────────────────────────────────────────────────── */
+.aj-spin {
+  animation: aj-rot 0.9s linear infinite;
+}
+@keyframes aj-rot {
+  to { transform: rotate(360deg); }
+}
+
+.aj-fade-in {
+  animation: aj-app-in 0.75s ease both;
+}
+/* NOTE: opacity-only — a persistent transform here would create a containing
+   block and break `position: fixed` descendants (mobile bottom nav). */
+@keyframes aj-app-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.aj-rise {
+  animation: aj-rise-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes aj-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+}
+
+/* Countdown pulse for live episodes */
+.aj-live-dot {
+  animation: aj-pulse 1.6s ease-in-out infinite;
+}
+@keyframes aj-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Card hover lift */
+.aj-card-hover {
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.28s ease;
+}
+.aj-card-hover:hover {
+  transform: translateY(-5px) scale(1.025);
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.65);
+  z-index: 5;
+}
+
+/* Hero ken-burns drift */
+.aj-kenburns {
+  animation: aj-kb 22s ease-in-out infinite alternate;
+}
+@keyframes aj-kb {
+  from { transform: scale(1.02) translateX(0); }
+  to { transform: scale(1.12) translateX(-1.6%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aj-kenburns,
+  .aj-splash-glow {
+    animation: none;
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "name": "Ajest — Anime, Unbound",
+  "short_name": "Ajest",
+  "description": "Premium anime streaming with simulcast countdowns, triple-tier catalog (AniList → Jikan → Consumet) and a triple-fallback HLS player.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "fullscreen"],
+  "orientation": "any",
+  "background_color": "#0b0d12",
+  "theme_color": "#0b0d12",
+  "categories": ["entertainment", "video"],
+  "icons": [
+    {
+      "src": "/ajest-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/ajest-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Simulcast Schedule",
+      "short_name": "Simulcast",
+      "url": "/?view=schedule",
+      "icons": [{ "src": "/ajest-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Search",
+      "short_name": "Search",
+      "url": "/?view=search",
+      "icons": [{ "src": "/ajest-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ]
+}
