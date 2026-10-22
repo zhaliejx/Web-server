@@ -4,6 +4,8 @@ Dark-mode anime streaming web app: AniList/Kitsu catalog, hero carousel,
 HLS player with a multi-tier provider chain, full SVG icons, watch history,
 and an honest fallback contract (never hangs, always explains).
 
+Use our official web-app
+-
 ## Stack
 
 - Next.js 16 (App Router, standalone output) · React · TypeScript · Tailwind 4 · shadcn/ui
@@ -51,3 +53,34 @@ build once, run `npx next start`, set `DATABASE_URL`.
 The scraper API (gogo/AnimePahe/Crunchyroll/AnimeKai/MangaDex providers) is a
 separate Express service: see the `Api-Ajest` repo (Anime-API extended fork).
 Deploy it anywhere with a stable IP, then list it in `RELAY_HOSTS`.
+
+# Recommendations
+
+My recommendation for the stream sources is ani.pm, you can Change it directly inside the settings on the top bar, You can disable Youtube (Official Player), Universal Player And Animekaizen Mirror
+
+as because the current Source chain 
+> gogo -> youtube -> ani.pm
+is a bit scuffed as When gogo fails The youtube Source will just play any Video It came across
+
+tested on "Solo Leveling" it play another animes trailer.
+
+# Credits
+This Project is made possible by the following Providers And API
+
+Ajest is a non-commercial fan project. It hosts no video — all playback is served by the third-party providers credited below, and all metadata belongs to its respective owners.
+
+
+AniList - Catalog, titles & artwork
+Kitsu -Mirror catalog & fallback data
+ani.zip - Episode metadata & ID mappings
+ani.pm - HD embed playback (sub & dub)
+Gogoanime - Direct stream sources
+VidLink - Universal fallback player
+AnimeKaizen - Latest-episode mirror
+YouTube - Official channel uploads
+hls.js - Adaptive stream playback
+
+And A big thanks for the following
+Z.ai - Did most of the debugging on my buggy code and All of The commits commited on gitbub
+
+> I had used their free Teir, on their website still works "GLM-5.3-FLASH"
