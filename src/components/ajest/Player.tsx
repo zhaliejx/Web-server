@@ -45,6 +45,7 @@ function proxied(url: string): string {
 function providerLabel(p: string): string {
   if (p.startsWith('youtube')) return 'Official source';
   if (p === 'vidlink') return 'Universal player';
+  if (p === 'kaizen') return 'Kaizen mirror';
   return p;
 }
 

@@ -8,6 +8,7 @@ import {
 } from '@/lib/ajest/upstream';
 import type { AniZipData } from '@/lib/ajest/upstream';
 import { resolveGogoStreams } from '@/lib/ajest/gogo';
+import { kaizenLatest } from '@/lib/ajest/kaizen';
 import type { StreamsPayload, VideoSource } from '@/lib/ajest/types';
 
 export const dynamic = 'force-dynamic';
@@ -97,8 +98,8 @@ export async function GET(req: Request) {
     // aggregator built for iframe embedding that covers effectively every
     // anime through its TMDB id (ani.zip bridges anilist → themoviedb_id).
     // It carries its own player UI, so the Player renders it as an embed.
+    const zep = zip?.episodes.find((e) => e.number === episode);
     if (zip?.tmdbId) {
-      const zep = zip.episodes.find((e) => e.number === episode);
       const season = zep?.seasonNumber ?? 1;
       sources.push({
         provider: 'vidlink',
@@ -107,6 +108,34 @@ export async function GET(req: Request) {
         isM3U8: false,
         note: 'Universal multi-server player',
       });
+    }
+
+    // ── AnimeKaizen latest-episode mirror (Blogger-hosted) ──────────────────
+    // animekaizen.org is a WordPress catalog where each anime post embeds the
+    // latest episode on Google's Blogger CDN (no X-Frame-Options → embeddable,
+    // same client-side pattern as VidLink). Its googlevideo URLs are IP-locked
+    // so the iframe must run in the user's browser. A post carries exactly one
+    // episode — we parse its title and only offer the source when it matches
+    // the requested episode, never serving the wrong content.
+    try {
+      const kz = await kaizenLatest(english || romaji || main);
+      if (kz) {
+        // Kaizen's season labels follow their own split, not ani.zip/TMDB
+        // numbering — so only the episode number is trusted here. The note
+        // always shows the exact episode title the mirror claims to carry.
+        const epOk = kz.episode === null || kz.episode === episode;
+        if (epOk) {
+          sources.push({
+            provider: 'kaizen',
+            url: `embed:${kz.embed}`,
+            quality: 'auto',
+            isM3U8: false,
+            note: kz.epTitle ? `Latest-episode mirror · ${kz.epTitle.slice(0, 80)}` : 'Latest-episode mirror',
+          });
+        }
+      }
+    } catch {
+      /* kaizen unreachable → next */
     }
 
     // Trailer as clearly-labeled last resort (official channels only)
