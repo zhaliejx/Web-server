@@ -15,12 +15,52 @@ import type { StreamsPayload, VideoSource } from '@/lib/ajest/types';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-// ── Stream resolution (verified live chain) ──────────────────────────────────
+// ── Stream resolution (parallel tiers) ───────────────────────────────────────
 //   1. gogoanime.by direct scrape (slug guess → site search → relay search)
 //   2. official YouTube resolution (channel-whitelisted uploads)
-// Every source URL is returned wrapped for /api/proxy — the stream URLs are
-// signed to OUR server IP, so the Next.js server must pipe the bytes with
-// Range support (that also removes any CORS concern).
+//   3. ani.pm verified-address embed (AniList id)
+//   4. VidLink universal embed (TMDB id via ani.zip)
+//   5. AnimeKaizen latest-episode mirror (Blogger embed)
+//
+// All independent lookups run CONCURRENTLY with per-tier time budgets —
+// response time ≈ slowest enabled tier instead of the serial sum. The
+// `providers` param (client source toggles) skips tiers entirely, which
+// shortens both the work and the wall clock.
+
+const ALL_PROVIDERS = ['gogo', 'youtube', 'anipm', 'vidlink', 'kaizen'] as const;
+type Tier = (typeof ALL_PROVIDERS)[number];
+
+/** Overall wall-clock cap before the response ships with whatever settled. */
+const FAST_EXIT_MS = 4500;
+
+/** Resolve a promise within a time budget; null on timeout or rejection. */
+function budget<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise<T | null>((resolve) => {
+    let done = false;
+    const t = setTimeout(() => {
+      if (!done) {
+        done = true;
+        resolve(null);
+      }
+    }, ms);
+    p.then(
+      (v) => {
+        if (!done) {
+          done = true;
+          clearTimeout(t);
+          resolve(v);
+        }
+      },
+      () => {
+        if (!done) {
+          done = true;
+          clearTimeout(t);
+          resolve(null);
+        }
+      }
+    );
+  });
+}
 
 function proxied(url: string): string {
   return `/api/proxy?u=${encodeURIComponent(url)}`;
@@ -36,160 +76,170 @@ export async function GET(req: Request) {
   const malId = sp.get('malId');
   const episode = Math.max(1, parseInt(sp.get('episode') || '1', 10) || 1);
 
+  // Client source toggles — disabled tiers are never contacted
+  const enabledParam = sp.get('providers');
+  const enabled = new Set<Tier>(
+    enabledParam
+      ? (enabledParam.split(',').filter((p) => (ALL_PROVIDERS as readonly string[]).includes(p)) as Tier[])
+      : ALL_PROVIDERS
+  );
+  if (enabled.size === 0) ALL_PROVIDERS.forEach((p) => enabled.add(p));
+
   if (!main) {
     return NextResponse.json({ ok: false, sources: [], providersTried: [], error: 'missing title' });
   }
 
-  // Look up the canonical episode title (ani.zip per-episode metadata)
-  let episodeTitle: string | undefined;
-  let zip: AniZipData | null = null;
-  let bridgedAnilist = anilistId ? parseInt(anilistId, 10) : undefined;
-  let bridgedMal = malId ? parseInt(malId, 10) : undefined;
-  if (bridgedAnilist || bridgedMal) {
-    zip = await aniZip({ anilistId: bridgedAnilist, malId: bridgedMal });
-    episodeTitle = zip?.episodes.find((e) => e.number === episode)?.title;
-    // Bridge missing ids from ani.zip mappings (works even with AniList down)
-    if (zip?.mappings) {
-      if (!bridgedAnilist && zip.mappings.anilist_id) bridgedAnilist = parseInt(String(zip.mappings.anilist_id), 10);
-      if (!bridgedMal && zip.mappings.mal_id) bridgedMal = parseInt(String(zip.mappings.mal_id), 10);
+  const bridgedAnilist = anilistId ? parseInt(anilistId, 10) : undefined;
+  const bridgedMal = malId ? parseInt(malId, 10) : undefined;
+
+  // ── Fire every independent lookup at once ─────────────────────────────────
+  // ani.zip also feeds the episode title shown in the player, so it runs
+  // whenever we have any id — it's a single cheap call inside the parallel
+  // window either way.
+  const zipP = budget(
+    (bridgedAnilist || bridgedMal)
+      ? aniZip({ anilistId: bridgedAnilist, malId: bridgedMal })
+      : Promise.resolve(null as AniZipData | null),
+    4500
+  );
+
+  const gogoP = enabled.has('gogo')
+    ? budget(resolveGogoStreams({ main, english, romaji, native, episode }), 10000)
+    : Promise.resolve(null);
+
+  const ytP = enabled.has('youtube')
+    ? budget(
+        youtubeSearch(
+          `${(english || romaji || main)
+            .replace(/[''`]/g, '')
+            .replace(/[^\w\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()} episode ${episode} english sub`,
+          5000
+        ).then((vids) => rankYoutubeEpisode(vids, english || romaji || main, episode)),
+        5500
+      )
+    : Promise.resolve(null);
+
+  const kzP = enabled.has('kaizen')
+    ? budget(kaizenLatest(english || romaji || main), 5000)
+    : Promise.resolve(null);
+
+  const malP = budget(malSyncOfficialLinks({ anilistId: bridgedAnilist, malId: bridgedMal }), 4500);
+
+  // ── Fast-exit ─────────────────────────────────────────────────────────
+  // All tiers race in parallel, but the response doesn't have to wait for
+  // every straggler: ani.pm + VidLink embeds are ready almost instantly, so
+  // after FAST_EXIT_MS we collect whatever finished and give stragglers a
+  // short grace window. A 13s gogo scrape can no longer hold the response
+  // hostage — the player auto-falls to the embed tiers instead.
+  const allTiers = Promise.all([zipP, gogoP, ytP, kzP, malP] as const);
+  let fastExit = false;
+  await Promise.race([
+    allTiers,
+    new Promise<null>((r) =>
+      setTimeout(() => {
+        fastExit = true;
+        r(null);
+      }, FAST_EXIT_MS)
+    ),
+  ]);
+  const [zip, resolved, ytHit, kz, officialLinks] = fastExit
+    ? await Promise.all([budget(zipP, 800), budget(gogoP, 800), budget(ytP, 1000), budget(kzP, 800), budget(malP, 500)])
+    : await allTiers;
+
+  // ── Compose the ordered fallback chain ────────────────────────────────────
+  const sources: VideoSource[] = [];
+
+  // 1. gogo direct files (native Ajest controls when they play)
+  if (resolved?.sources?.length) {
+    for (const s of resolved.sources) {
+      sources.push({ ...s, url: proxied(s.url) });
     }
   }
 
-  try {
-    const resolved = await resolveGogoStreams({ main, english, romaji, native, episode });
+  // 2. official YouTube full episode
+  if (ytHit) {
+    sources.push({
+      provider: ytHit.official ? 'youtube-official' : 'youtube-full',
+      url: `youtube:${ytHit.video.videoId}`,
+      quality: 'full',
+      isM3U8: false,
+      note: ytHit.official
+        ? `Official full episode · ${ytHit.video.channel}`
+        : `Full episode · ${ytHit.video.channel}`,
+    });
+  }
 
-    const sources: VideoSource[] = resolved.sources.map((s) => ({
-      ...s,
-      url: proxied(s.url),
-    }));
+  // 3. ani.pm verified-address embed — partner player with `frame-ancestors *`;
+  //    episode numbering matches AniList. Its Cloudflare blocks Node TLS
+  //    fingerprints, so the server ships the URL blind and the Player
+  //    verifies availability from the browser via the CORS-open partner API.
+  if (bridgedAnilist && enabled.has('anipm')) {
+    sources.push({
+      provider: 'anipm',
+      url: `embed:${aniPmEmbedUrl(bridgedAnilist, episode, 'sub')}`,
+      quality: 'auto',
+      isM3U8: false,
+      note: 'Full episode · sub (dub switchable in player)',
+    });
+  }
 
-    // Real official watch destinations (MALSync) — shown when a scrape fails
-    const officialLinks = await malSyncOfficialLinks({ anilistId: bridgedAnilist, malId: bridgedMal });
+  // 4. VidLink universal embed (TMDB-addressed) — catalog-wide coverage
+  const zep = zip?.episodes.find((e) => e.number === episode);
+  if (zip?.tmdbId && enabled.has('vidlink')) {
+    const season = zep?.seasonNumber ?? 1;
+    sources.push({
+      provider: 'vidlink',
+      url: `embed:https://vidlink.pro/tv/${zip.tmdbId}/${season}/${episode}`,
+      quality: 'auto',
+      isM3U8: false,
+      note: 'Universal multi-server player',
+    });
+  }
 
-    // ── Official YouTube resolution (always in the chain) ──────────────────
-    // gogo googlevideo MP4s are signed to source-infra IPs and cannot play in
-    // a browser; official channel uploads (Muse Asia, Ani-One…) can. Gogo
-    // sources stay first — if the deployment IP happens to match they play,
-    // otherwise the <video> error fires in ~1s and the player falls through.
-    const cleanTitle = (english || romaji || main)
-      .replace(/[''`]/g, '')
-      .replace(/[^\w\s]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    const q = `${cleanTitle} episode ${episode} english sub`;
+  // 5. AnimeKaizen latest-episode mirror (Blogger-hosted, episode-matched)
+  if (kz) {
+    const epOk = kz.episode === null || kz.episode === episode;
+    if (epOk) {
+      sources.push({
+        provider: 'kaizen',
+        url: `embed:${kz.embed}`,
+        quality: 'auto',
+        isM3U8: false,
+        note: kz.epTitle ? `Latest-episode mirror · ${kz.epTitle.slice(0, 80)}` : 'Latest-episode mirror',
+      });
+    }
+  }
+
+  // Trailer as clearly-labeled last resort (official channels only)
+  if (enabled.has('youtube') && (!sources.length || sources.every((s) => s.provider.startsWith('gogo-')))) {
     try {
-      const vids = await youtubeSearch(q, 10000);
-      const hit = rankYoutubeEpisode(vids, english || romaji || main, episode);
-      if (hit) {
+      const tvids = await youtubeSearch(`official trailer ${english || romaji || main}`, 9000);
+      const tr = rankYoutubeTrailer(tvids);
+      if (tr) {
         sources.push({
-          provider: hit.official ? 'youtube-official' : 'youtube-full',
-          url: `youtube:${hit.video.videoId}`,
-          quality: 'full',
+          provider: 'youtube-trailer',
+          url: `youtube:${tr.videoId}`,
+          quality: 'trailer',
           isM3U8: false,
-          note: hit.official
-            ? `Official full episode · ${hit.video.channel}`
-            : `Full episode · ${hit.video.channel}`,
+          note: `Official trailer · ${tr.channel}`,
         });
       }
     } catch {
-      /* youtube unreachable → next */
+      /* youtube unreachable */
     }
-    // ── ani.pm verified-address embed (AniList-addressed, dub-capable) ─────
-    // Partner-first embed player with `frame-ancestors *`; episode numbering
-    // matches AniList. Its Cloudflare blocks Node TLS fingerprints, so the
-    // server ships the URL blind and the Player verifies availability from
-    // the browser via ani.pm's CORS-open partner API (auto-skips dead
-    // episodes without touching the chain on the happy path).
-    if (bridgedAnilist) {
-      sources.push({
-        provider: 'anipm',
-        url: `embed:${aniPmEmbedUrl(bridgedAnilist, episode, 'sub')}`,
-        quality: 'auto',
-        isM3U8: false,
-        note: 'Full episode · sub (dub switchable in player)',
-      });
-    }
-
-    // ── VidLink universal embed (TMDB-addressed) — catalog-wide coverage ───
-    // gogoanime.by only hosts a slice of shows; VidLink is a multi-server
-    // aggregator built for iframe embedding that covers effectively every
-    // anime through its TMDB id (ani.zip bridges anilist → themoviedb_id).
-    // It carries its own player UI, so the Player renders it as an embed.
-    const zep = zip?.episodes.find((e) => e.number === episode);
-    if (zip?.tmdbId) {
-      const season = zep?.seasonNumber ?? 1;
-      sources.push({
-        provider: 'vidlink',
-        url: `embed:https://vidlink.pro/tv/${zip.tmdbId}/${season}/${episode}`,
-        quality: 'auto',
-        isM3U8: false,
-        note: 'Universal multi-server player',
-      });
-    }
-
-    // ── AnimeKaizen latest-episode mirror (Blogger-hosted) ──────────────────
-    // animekaizen.org is a WordPress catalog where each anime post embeds the
-    // latest episode on Google's Blogger CDN (no X-Frame-Options → embeddable,
-    // same client-side pattern as VidLink). Its googlevideo URLs are IP-locked
-    // so the iframe must run in the user's browser. A post carries exactly one
-    // episode — we parse its title and only offer the source when it matches
-    // the requested episode, never serving the wrong content.
-    try {
-      const kz = await kaizenLatest(english || romaji || main);
-      if (kz) {
-        // Kaizen's season labels follow their own split, not ani.zip/TMDB
-        // numbering — so only the episode number is trusted here. The note
-        // always shows the exact episode title the mirror claims to carry.
-        const epOk = kz.episode === null || kz.episode === episode;
-        if (epOk) {
-          sources.push({
-            provider: 'kaizen',
-            url: `embed:${kz.embed}`,
-            quality: 'auto',
-            isM3U8: false,
-            note: kz.epTitle ? `Latest-episode mirror · ${kz.epTitle.slice(0, 80)}` : 'Latest-episode mirror',
-          });
-        }
-      }
-    } catch {
-      /* kaizen unreachable → next */
-    }
-
-    // Trailer as clearly-labeled last resort (official channels only)
-    if (!sources.length || sources.every((s) => s.provider.startsWith('gogo-'))) {
-      try {
-        const tvids = await youtubeSearch(`official trailer ${english || romaji || main}`, 9000);
-        const tr = rankYoutubeTrailer(tvids);
-        if (tr) {
-          sources.push({
-            provider: 'youtube-trailer',
-            url: `youtube:${tr.videoId}`,
-            quality: 'trailer',
-            isM3U8: false,
-            note: `Official trailer · ${tr.channel}`,
-          });
-        }
-      } catch {
-        /* youtube unreachable */
-      }
-    }
-
-    const payload: StreamsPayload = {
-      ok: sources.length > 0,
-      sources,
-      providersTried: resolved.steps.map((s) => ({ provider: s.provider, ok: s.ok, error: s.error })),
-      episodeTitle: episodeTitle || resolved.episodeTitle,
-      officialLinks,
-    };
-    return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (e) {
-    const officialLinks = await malSyncOfficialLinks({ anilistId: bridgedAnilist, malId: bridgedMal });
-    const payload: StreamsPayload = {
-      ok: false,
-      sources: [],
-      providersTried: [{ provider: 'gogo-by', ok: false, error: (e as Error).message?.slice(0, 80) }],
-      officialLinks,
-    };
-    return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
   }
+
+  const episodeTitle = zip?.episodes.find((e) => e.number === episode)?.title || resolved?.episodeTitle;
+  const providersTried = resolved?.steps.map((s) => ({ provider: s.provider, ok: s.ok, error: s.error })) ?? [];
+
+  const payload: StreamsPayload = {
+    ok: sources.length > 0,
+    sources,
+    providersTried,
+    episodeTitle: episodeTitle || undefined,
+    officialLinks: officialLinks ?? undefined,
+  };
+  return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
 }

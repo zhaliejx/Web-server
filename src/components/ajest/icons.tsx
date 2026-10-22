@@ -52,6 +52,7 @@ export function AjestMark({
   const uid = useId().replace(/[:]/g, '');
   const gradId = `aj-g-${uid}`;
   const glowId = `aj-gl-${uid}`;
+  const shineId = `aj-sh-${uid}`;
   return (
     <svg
       width={size}
@@ -63,9 +64,14 @@ export function AjestMark({
     >
       <defs>
         <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#FFB347" />
-          <stop offset="45%" stopColor="#FF7A1A" />
-          <stop offset="100%" stopColor="#F4511E" />
+          <stop offset="0%" stopColor="#FFC15E" />
+          <stop offset="42%" stopColor="#FF7A1A" />
+          <stop offset="100%" stopColor="#E8442A" />
+        </linearGradient>
+        <linearGradient id={shineId} x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.34" />
+          <stop offset="52%" stopColor="#ffffff" stopOpacity="0.05" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
         </linearGradient>
         <filter id={glowId} x="-60%" y="-60%" width="220%" height="220%">
           <feGaussianBlur stdDeviation="2.2" result="blur" />
@@ -75,9 +81,9 @@ export function AjestMark({
           </feMerge>
         </filter>
       </defs>
-      {/* Outer "A" triangle */}
+      {/* Rounded "A" triangle badge with a knocked-out play button */}
       <path
-        d="M24 6.5 L41.5 41.5 H6.5 Z"
+        d="M22.1 7.9a2.2 2.2 0 0 1 3.8 0l16.4 28.6a2.2 2.2 0 0 1-1.9 3.3H7.6a2.2 2.2 0 0 1-1.9-3.3L22.1 7.9Z"
         fill={`url(#${gradId})`}
         stroke={`url(#${gradId})`}
         strokeWidth={animated ? 3.4 : 0}
@@ -86,23 +92,29 @@ export function AjestMark({
         filter={animated ? `url(#${glowId})` : undefined}
         style={animated ? { fillOpacity: 0 } : undefined}
       />
-      {/* Crossbar of the A */}
+      {/* Top sheen — gives the badge depth */}
       <path
-        d="M17.2 31.5 H30.8"
-        stroke="#0B0D12"
-        strokeWidth={3.2}
-        strokeLinecap="round"
-        className={animated ? 'aj-draw aj-draw-2' : undefined}
+        d="M22.1 7.9a2.2 2.2 0 0 1 3.8 0l8.5 14.8H13.6l8.5-14.8Z"
+        fill={`url(#${shineId})`}
+        className={animated ? 'aj-fade' : undefined}
       />
-      {/* Play-dot counter */}
-      <circle
-        cx="24"
-        cy="21.5"
-        r={3.1}
+      {/* Negative-space play triangle — the A crossbar becomes the play cut */}
+      <path
+        d="M20.2 21.6a1.7 1.7 0 0 1 2.56-1.47l9.1 5.4a1.7 1.7 0 0 1 0 2.94l-9.1 5.4a1.7 1.7 0 0 1-2.56-1.47v-10.8Z"
         fill="#0B0D12"
-        className={animated ? 'aj-pop' : undefined}
-        style={animated ? { transformOrigin: '24px 21.5px' } : undefined}
+        className={animated ? 'aj-draw aj-draw-2' : undefined}
+        style={animated ? { fillOpacity: 0 } : undefined}
       />
+      {/* Broadcast spark — anime antenna accent */}
+      <circle
+        cx="38.4"
+        cy="9.2"
+        r={2.3}
+        fill={`url(#${gradId})`}
+        className={animated ? 'aj-pop' : undefined}
+        style={animated ? { transformOrigin: '38.4px 9.2px' } : undefined}
+      />
+      <circle cx="38.4" cy="9.2" r={4.1} fill="#FF7A1A" opacity={0.25} className={animated ? 'aj-pop' : undefined} style={animated ? { transformOrigin: '38.4px 9.2px' } : undefined} />
     </svg>
   );
 }

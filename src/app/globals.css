@@ -387,3 +387,12 @@ li:has(.aj-splash-svc-state.is-degraded) .aj-splash-svc-label { opacity: 0.75; }
     animation: none;
   }
 }
+
+/* AjestMark: late fade-in for the badge sheen (splash animation) */
+.aj-fade {
+  opacity: 0;
+  animation: aj-fade-in 0.6s ease 1.5s forwards;
+}
+@keyframes aj-fade-in {
+  to { opacity: 1; }
+}

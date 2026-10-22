@@ -4,7 +4,8 @@
 // Makes Ajest behave like a real installable web app. All glyphs are inline SVG.
 
 import { useCallback, useEffect, useState } from 'react';
-import { IconFullscreen, IconFullscreenExit, IconInstall } from './icons';
+import { IconFullscreen, IconFullscreenExit, IconGear, IconInstall } from './icons';
+import { SourceSettings } from './SourceSettings';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -23,6 +24,7 @@ export function AppControls({ compact = false }: { compact?: boolean }) {
   );
   const [installEvt, setInstallEvt] = useState<BeforeInstallPromptEvent | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
 
   // Track fullscreen state (also handles Esc key + F11 natively)
   useEffect(() => {
@@ -96,6 +98,16 @@ export function AppControls({ compact = false }: { compact?: boolean }) {
         </button>
       )}
 
+      {/* Streaming source toggles */}
+      <button
+        onClick={() => setSourcesOpen(true)}
+        aria-label="Streaming source settings"
+        title="Streaming sources"
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.07] text-white/75 transition hover:bg-white/[0.14] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff7a1a]"
+      >
+        <IconGear size={17} />
+      </button>
+
       {/* Immersive fullscreen toggle */}
       <button
         onClick={toggleFullscreen}
@@ -110,6 +122,9 @@ export function AppControls({ compact = false }: { compact?: boolean }) {
       >
         {isFullscreen ? <IconFullscreenExit size={17} /> : <IconFullscreen size={17} />}
       </button>
+
+      {/* Source settings modal */}
+      <SourceSettings open={sourcesOpen} onClose={() => setSourcesOpen(false)} />
 
       {/* Non-blocking hint toast */}
       {hint && (

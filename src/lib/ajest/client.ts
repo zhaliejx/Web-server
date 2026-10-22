@@ -1,6 +1,7 @@
 'use client';
 
 import type { AnimeCard, DetailPayload, HealthPayload, StreamsPayload } from './types';
+import { enabledProviders } from './prefs';
 
 // ── Client fetch helpers (all relative paths through the Next.js gateway) ───
 
@@ -45,6 +46,8 @@ export async function fetchStreams(anime: Pick<AnimeCard, 'title' | 'titleEnglis
   if (anime.titleNative) p.set('titleNative', anime.titleNative);
   if (anime.anilistId) p.set('anilistId', String(anime.anilistId));
   if (anime.malId) p.set('malId', String(anime.malId));
+  // Source toggles — disabled tiers are skipped server-side entirely
+  p.set('providers', enabledProviders().join(','));
   const r = await fetch(`/api/streams?${p.toString()}`, { cache: 'no-store' });
   return r.json();
 }
