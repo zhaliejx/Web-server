@@ -51,7 +51,10 @@ export function slugifyTitle(title: string): string {
 /** Candidate slugs: english title, romaji-ish full title, stripped season words.
  *  Gogo hyphenates apostrophes ("Journey's End" → journey-s-end), so each title
  *  also yields an apostrophe→hyphen variant — matches real slugs like
- *  frieren-beyond-journey-s-end exactly. */
+ *  frieren-beyond-journey-s-end exactly.
+ *  Spaced titles are additionally squeezed ("DAN DA DAN" → dandadan): the site's
+ *  WordPress search matches whole words only, so ?s=dan+da+dan can never find a
+ *  post titled "Dandadan" — the squeezed slug is often the ONLY way in. */
 export function slugCandidates(titles: { main: string; english?: string; romaji?: string; native?: string }): string[] {
   const out = new Set<string>();
   for (const t of [titles.main, titles.english, titles.romaji, titles.native]) {
@@ -60,6 +63,9 @@ export function slugCandidates(titles: { main: string; english?: string; romaji?
       const base = slugifyTitle(variant);
       if (base) {
         out.add(base);
+        // squeeze BEFORE the season suffix so "dan-da-dan" → "dandadan" ranks early
+        const squeezed = base.replace(/-/g, '');
+        if (squeezed !== base) out.add(squeezed);
         // gogo often appends "1" for the first season (one-piece → one-piece-1)
         out.add(`${base}-1`);
       }
@@ -303,6 +309,39 @@ export interface ResolveOutput {
   episodeTitle?: string;
 }
 
+type ExtractResult =
+  | { status: 'ok'; sources: VideoSource[] }
+  | { status: 'no-category' }
+  | { status: 'no-episode' }
+  | { status: 'no-sources' };
+
+/** Shared slug→sources extractor used by every strategy.
+ *  Handles the category-widget trap: gogoanime.by category pages list only
+ *  RECENT episodes (e.g. dandadan lists 3–12), so any earlier episode must be
+ *  probed at its canonical URL (-episode-N-english-subbed/-dubbed) directly. */
+async function extractEpisodeSources(slug: string, ep: number): Promise<ExtractResult> {
+  const series = await gogoCategory(slug, ep);
+  if (!series) return { status: 'no-category' };
+  let path = series.episodes.get(ep) || series.dubEpisodes.get(ep);
+  if (!path) {
+    const prefix = slug.replace(/-\d+$/, '');
+    const probes = [`${prefix}-episode-${ep}-english-subbed`, `${prefix}-episode-${ep}-english-dubbed`];
+    for (const p of probes) {
+      if (await gogoEpisodeExists(p)) {
+        path = p;
+        break;
+      }
+    }
+  }
+  if (!path) return { status: 'no-episode' };
+  const players = await gogoEpisodePlayers(path);
+  for (const link of players) {
+    const sources = await gogoPlayerSources(link);
+    if (sources.length) return { status: 'ok', sources };
+  }
+  return { status: 'no-sources' };
+}
+
 export async function resolveGogoStreams(input: ResolveInput): Promise<ResolveOutput> {
   const steps: ResolveStep[] = [];
   const ep = Math.max(1, Math.floor(input.episode));
@@ -311,46 +350,21 @@ export async function resolveGogoStreams(input: ResolveInput): Promise<ResolveOu
   const candidates = slugCandidates(input);
   for (const slug of candidates.slice(0, 6)) {
     try {
-      const series = await gogoCategory(slug, ep);
-      if (!series) {
-        steps.push({ provider: `gogo-by:${slug}`, ok: false, error: 'category not found' });
-        continue;
+      const r = await extractEpisodeSources(slug, ep);
+      if (r.status === 'ok' && r.sources) {
+        steps.push({ provider: `gogo-by:${slug}`, ok: true });
+        return { sources: r.sources, steps, matchedSlug: slug };
       }
-      const path = series.episodes.get(ep) || series.dubEpisodes.get(ep);
-      if (!path) {
-        // Category exists but widget only lists recent episodes — probe the
-        // canonical episode URL directly before giving up on this slug.
-        const prefix = slug.replace(/-\d+$/, '');
-        const probes = [`${prefix}-episode-${ep}-english-subbed`, `${prefix}-episode-${ep}-english-dubbed`];
-        let probed: string | null = null;
-        for (const p of probes) {
-          if (await gogoEpisodeExists(p)) {
-            probed = p;
-            break;
-          }
-        }
-        if (probed) {
-          const players = await gogoEpisodePlayers(probed);
-          for (const link of players) {
-            const sources = await gogoPlayerSources(link);
-            if (sources.length) {
-              steps.push({ provider: `gogo-by:${slug}`, ok: true });
-              return { sources, steps, matchedSlug: slug };
-            }
-          }
-        }
-        steps.push({ provider: `gogo-by:${slug}`, ok: false, error: `episode ${ep} not hosted` });
-        continue;
-      }
-      const players = await gogoEpisodePlayers(path);
-      for (const link of players) {
-        const sources = await gogoPlayerSources(link);
-        if (sources.length) {
-          steps.push({ provider: `gogo-by:${slug}`, ok: true });
-          return { sources, steps, matchedSlug: slug };
-        }
-      }
-      steps.push({ provider: `gogo-by:${slug}`, ok: false, error: 'no extractable sources' });
+      steps.push({
+        provider: `gogo-by:${slug}`,
+        ok: false,
+        error:
+          r.status === 'no-category'
+            ? 'category not found'
+            : r.status === 'no-episode'
+              ? `episode ${ep} not hosted`
+              : 'no extractable sources',
+      });
     } catch (e) {
       steps.push({ provider: `gogo-by:${slug}`, ok: false, error: (e as Error).message?.slice(0, 60) });
     }
@@ -381,16 +395,10 @@ export async function resolveGogoStreams(input: ResolveInput): Promise<ResolveOu
     steps.push({ provider: 'gogo-by:search', ok: ranked.length > 0, error: ranked.length ? undefined : 'no close match' });
     for (const { s } of ranked.slice(0, 3)) {
       try {
-        const series = await gogoCategory(s, ep);
-        const path = series?.episodes.get(ep) || series?.dubEpisodes.get(ep);
-        if (!path) continue;
-        const players = await gogoEpisodePlayers(path);
-        for (const link of players) {
-          const sources = await gogoPlayerSources(link);
-          if (sources.length) {
-            steps.push({ provider: `gogo-by:${s}`, ok: true });
-            return { sources, steps, matchedSlug: s };
-          }
+        const r = await extractEpisodeSources(s, ep);
+        if (r.status === 'ok' && r.sources) {
+          steps.push({ provider: `gogo-by:${s}`, ok: true });
+          return { sources: r.sources, steps, matchedSlug: s };
         }
       } catch {
         /* keep trying */
@@ -411,16 +419,10 @@ export async function resolveGogoStreams(input: ResolveInput): Promise<ResolveOu
     steps.push({ provider: 'relay-search', ok: ranked.length > 0, error: ranked.length ? undefined : 'no close match' });
     for (const { r } of ranked.slice(0, 3)) {
       try {
-        const series = await gogoCategory(r.id, ep);
-        const path = series?.episodes.get(ep) || series?.dubEpisodes.get(ep);
-        if (!path) continue;
-        const players = await gogoEpisodePlayers(path);
-        for (const link of players) {
-          const sources = await gogoPlayerSources(link);
-          if (sources.length) {
-            steps.push({ provider: `relay-gogo:${r.id}`, ok: true });
-            return { sources, steps, matchedSlug: r.id };
-          }
+        const x = await extractEpisodeSources(r.id, ep);
+        if (x.status === 'ok' && x.sources) {
+          steps.push({ provider: `relay-gogo:${r.id}`, ok: true });
+          return { sources: x.sources, steps, matchedSlug: r.id };
         }
       } catch {
         /* keep trying */

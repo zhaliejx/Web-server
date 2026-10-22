@@ -34,13 +34,17 @@ npm run dev               # http://localhost:3000
 ## Deploy (Render example)
 
 - **Build:** `npm install && npx prisma generate && mkdir -p db && npm run build`
-- **Start:** `node .next/standalone/server.js`
+- **Start:** `npx next start`  ← do NOT use `node .next/standalone/server.js` (see note)
 - **Env:** `DATABASE_URL=file:/opt/render/project/src/db/custom.db` (absolute path)
   - optional: `RELAY_HOSTS=https://api-ajest.onrender.com` (comma-separated)
 - Free-tier disks are ephemeral — history/prefs reset on redeploy unless you attach a disk.
 
+> ⚠️ Next.js 16.1.x bug: Turbopack builds silently omit
+> `.next/standalone/server.js` (vercel/next.js#88844). Always start with
+> `npx next start` — it reads the `PORT`/`HOSTNAME` env vars natively.
+
 Works the same on any Node host (Fly, Railway, VPS, home server):
-build once, run the standalone server, set `DATABASE_URL`.
+build once, run `npx next start`, set `DATABASE_URL`.
 
 ## Companion API
 
