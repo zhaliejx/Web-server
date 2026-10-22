@@ -90,6 +90,7 @@ export function toMangaItem(m: MdManga): MangaItem {
     tags: (a.tags || []).map((t) => t.attributes.name.en || Object.values(t.attributes.name)[0]).filter(Boolean),
     origin,
     lastChapter: a.lastChapter || undefined,
+    source: 'mangadex',
   };
 }
 

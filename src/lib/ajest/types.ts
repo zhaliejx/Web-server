@@ -112,6 +112,8 @@ export interface MangaItem {
   rating?: number;
   follows?: number;
   authors?: string[];
+  /** Upstream the item came from — mangadex API tier or the mangapill scrape */
+  source?: 'mangadex' | 'mangapill';
 }
 
 export interface MangaChapter {

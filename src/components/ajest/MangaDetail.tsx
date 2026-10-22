@@ -127,10 +127,19 @@ export function MangaDetail({ manga, onBack, onRead }: Props) {
           </div>
 
           <div className="min-w-0 flex-1 text-center md:text-left">
-            {origin && (
-              <span className="mb-2 inline-block rounded-md bg-[var(--aj-acc-15)] px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-[var(--aj-acc-hi)]">
-                {origin}
-              </span>
+            {(origin || full.source === 'mangapill') && (
+              <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5 md:justify-start">
+                {origin && (
+                  <span className="inline-block rounded-md bg-[var(--aj-acc-15)] px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-[var(--aj-acc-hi)]">
+                    {origin}
+                  </span>
+                )}
+                {full.source === 'mangapill' && (
+                  <span className="inline-block rounded-md bg-white/[0.07] px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-white/55">
+                    MangaPill
+                  </span>
+                )}
+              </div>
             )}
             <h1 className="text-[24px] font-extrabold leading-tight text-white md:text-[32px]">{full.title}</h1>
             {full.authors && full.authors.length > 0 && (
