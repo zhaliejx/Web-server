@@ -9,6 +9,7 @@ import {
 import type { AniZipData } from '@/lib/ajest/upstream';
 import { resolveGogoStreams } from '@/lib/ajest/gogo';
 import { kaizenLatest } from '@/lib/ajest/kaizen';
+import { aniPmEmbedUrl } from '@/lib/ajest/anipm';
 import type { StreamsPayload, VideoSource } from '@/lib/ajest/types';
 
 export const dynamic = 'force-dynamic';
@@ -93,6 +94,22 @@ export async function GET(req: Request) {
     } catch {
       /* youtube unreachable → next */
     }
+    // ── ani.pm verified-address embed (AniList-addressed, dub-capable) ─────
+    // Partner-first embed player with `frame-ancestors *`; episode numbering
+    // matches AniList. Its Cloudflare blocks Node TLS fingerprints, so the
+    // server ships the URL blind and the Player verifies availability from
+    // the browser via ani.pm's CORS-open partner API (auto-skips dead
+    // episodes without touching the chain on the happy path).
+    if (bridgedAnilist) {
+      sources.push({
+        provider: 'anipm',
+        url: `embed:${aniPmEmbedUrl(bridgedAnilist, episode, 'sub')}`,
+        quality: 'auto',
+        isM3U8: false,
+        note: 'Full episode · sub (dub switchable in player)',
+      });
+    }
+
     // ── VidLink universal embed (TMDB-addressed) — catalog-wide coverage ───
     // gogoanime.by only hosts a slice of shows; VidLink is a multi-server
     // aggregator built for iframe embedding that covers effectively every

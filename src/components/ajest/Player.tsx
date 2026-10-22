@@ -45,8 +45,37 @@ function proxied(url: string): string {
 function providerLabel(p: string): string {
   if (p.startsWith('youtube')) return 'Official source';
   if (p === 'vidlink') return 'Universal player';
+  if (p === 'anipm') return 'HD player';
   if (p === 'kaizen') return 'Kaizen mirror';
   return p;
+}
+
+// ── ani.pm browser-side availability check ─────────────────────────────────
+// ani.pm's Cloudflare blocks Node TLS fingerprints, so the server cannot
+// verify episodes — but the partner API is CORS-open for browsers. The check
+// runs in the USER'S browser (optimistic: iframe mounts immediately, only
+// verified-missing episodes auto-switch provider).
+const aniPmCache = new Map<number, { at: number; numbers?: Set<number> }>();
+const ANIPM_EP_RE = /^https:\/\/ani\.pm\/embed\/ani\/(\d+)\/(\d+)\/(?:sub|dub)(?:[?#]|$)/;
+async function aniPmEpisodeExists(anilistId: number, episode: number): Promise<boolean | null> {
+  const hit = aniPmCache.get(anilistId);
+  if (hit && Date.now() - hit.at < 600000) {
+    return hit.numbers ? hit.numbers.has(episode) : null;
+  }
+  try {
+    const r = await fetch(`https://ani.pm/api/partner/v1/series/${anilistId}`, { credentials: 'omit' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    const list = d?.data?.episodeList;
+    if (!Array.isArray(list) || !list.length) throw new Error('no episodeList');
+    const numbers = new Set<number>();
+    for (const e of list) if (typeof e?.number === 'number') numbers.add(e.number);
+    aniPmCache.set(anilistId, { at: Date.now(), numbers });
+    return numbers.has(episode);
+  } catch {
+    aniPmCache.set(anilistId, { at: Date.now() }); // fail marker — don't hammer
+    return null;
+  }
 }
 
 // ── Official IFrame Player API loader ──────────────────────────────────────
@@ -142,6 +171,8 @@ export default function Player({
   const [ytEmbed, setYtEmbed] = useState<{ id: string; note?: string; provider: string } | null>(null);
   const [extEmbed, setExtEmbed] = useState<{ url: string; provider: string; note?: string } | null>(null);
   const extNextRef = useRef<(() => void) | null>(null);
+  // Race guard for async embed validation — only act while THIS embed is live
+  const activeEmbedUrlRef = useRef<string | null>(null);
   const [ytHint, setYtHint] = useState(false);
 
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -266,10 +297,23 @@ export default function Player({
     // playback; Ajest keeps the top bar + a provider-switch chip and listens
     // for completion events to auto-advance.
     if (src.url.startsWith('embed:')) {
+      const embedUrl = src.url.slice('embed:'.length);
       setYtEmbed(null);
       ytActiveRef.current = false;
-      setExtEmbed({ url: src.url.slice('embed:'.length), provider: src.provider, note: src.note });
+      setExtEmbed({ url: embedUrl, provider: src.provider, note: src.note });
+      activeEmbedUrlRef.current = embedUrl;
       extNextRef.current = () => nextSource(`${providerLabel(src.provider)} unavailable — switching provider…`);
+      // ani.pm episodes: verify in-browser; auto-switch only on a confirmed miss
+      if (src.provider === 'anipm') {
+        const m = ANIPM_EP_RE.exec(embedUrl);
+        if (m) {
+          void aniPmEpisodeExists(Number(m[1]), Number(m[2])).then((exists) => {
+            if (exists === false && activeEmbedUrlRef.current === embedUrl) {
+              extNextRef.current?.();
+            }
+          });
+        }
+      }
       setCurrent(0);
       setDuration(0);
       setBuffered(0);
@@ -279,6 +323,7 @@ export default function Player({
       return;
     }
     setExtEmbed(null);
+    activeEmbedUrlRef.current = null;
 
     // ── Embedded official source — identity fully masked, Ajest-native controls ──
     if (src.url.startsWith('youtube:')) {
