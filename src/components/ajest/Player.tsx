@@ -829,6 +829,13 @@ export default function Player({
             allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
             referrerPolicy="origin"
+            /* Capability jail: scripts + storage keep the upstream player
+               fully working (HLS/MSE, autoplay, prefs), but WITHOUT
+               allow-top-navigation / allow-popups a click on the video can
+               no longer drag the user out of Ajest to the provider's site
+               or an ad tab (ani.pm does exactly this). Cross-origin content
+               can never escape the sandbox to touch our DOM. */
+            sandbox="allow-scripts allow-same-origin"
             title={`Ajest — ${providerLabel(extEmbed.provider)}`}
           />
           {/* Wake strips — cross-origin iframes swallow mousemove, so these
