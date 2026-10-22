@@ -53,16 +53,16 @@ function AnimeCardBase({ anime, onOpen, historyEntry, compact, badge }: Props) {
   return (
     <button
       onClick={() => onOpen(anime)}
-      className="aj-card-hover group relative w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff7a1a] rounded-xl"
+      className="aj-card-hover group relative w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--aj-acc)] rounded-xl"
       aria-label={`Open ${anime.title}`}
     >
-      <div className="relative aspect-[2/3] w-full overflow-hidden rounded-xl bg-[#171b24] ring-1 ring-white/[0.07] group-hover:ring-[#ff7a1a]/50 transition-shadow">
+      <div className="relative aspect-[2/3] w-full overflow-hidden rounded-xl bg-[#171b24] ring-1 ring-white/[0.07] group-hover:ring-[var(--aj-acc-50)] transition-shadow">
         <PosterImage src={anime.cover} alt={anime.title} className="transition-transform duration-500 group-hover:scale-[1.07]" />
 
         {/* top badges */}
         <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1.5">
           {badge ? (
-            <span className="rounded-md bg-[#ff7a1a] px-1.5 py-0.5 text-[10px] font-bold text-black shadow-lg">
+            <span className="rounded-md bg-[var(--aj-acc)] px-1.5 py-0.5 text-[10px] font-bold text-black shadow-lg">
               {badge}
             </span>
           ) : (
@@ -78,7 +78,7 @@ function AnimeCardBase({ anime, onOpen, historyEntry, compact, badge }: Props) {
 
         {/* hover overlay */}
         <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/85 via-black/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#ff7a1a] text-black shadow-[0_0_30px_rgba(255,122,26,0.55)] scale-75 transition-transform duration-300 group-hover:scale-100">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--aj-acc)] text-black shadow-[0_0_30px_rgba(255,122,26,0.55)] scale-75 transition-transform duration-300 group-hover:scale-100">
             <IconPlay size={20} />
           </span>
         </div>
@@ -94,13 +94,13 @@ function AnimeCardBase({ anime, onOpen, historyEntry, compact, badge }: Props) {
         {/* watch progress bar (History) */}
         {progressPct > 0 && (
           <div className="absolute bottom-0 left-0 right-0 h-[3.5px] bg-white/15">
-            <div className="h-full bg-[#ff7a1a]" style={{ width: `${progressPct}%` }} />
+            <div className="h-full bg-[var(--aj-acc)]" style={{ width: `${progressPct}%` }} />
           </div>
         )}
       </div>
 
       <div className="mt-2 px-0.5">
-        <h3 className={`font-semibold leading-snug text-[13.5px] text-white/92 line-clamp-2 group-hover:text-[#ffb37a] transition-colors ${compact ? 'text-[12.5px]' : ''}`}>
+        <h3 className={`font-semibold leading-snug text-[13.5px] text-white/92 line-clamp-2 group-hover:text-[var(--aj-acc-hi)] transition-colors ${compact ? 'text-[12.5px]' : ''}`}>
           {anime.title}
         </h3>
         <p className="mt-0.5 text-[11px] text-white/40 line-clamp-1">
@@ -143,7 +143,7 @@ export function EpisodeItem({
       className={`group flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-[#14171f] p-2 text-left transition-colors ${
         unreleased
           ? 'cursor-not-allowed opacity-45'
-          : 'hover:border-[#ff7a1a]/50 hover:bg-[#1a1f2b] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff7a1a]'
+          : 'hover:border-[var(--aj-acc-50)] hover:bg-[#1a1f2b] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--aj-acc)]'
       }`}
       aria-label={unreleased ? `Episode ${number} not yet released` : `Play episode ${number}`}
     >
@@ -167,13 +167,13 @@ export function EpisodeItem({
         </span>
         {progressPct !== undefined && progressPct > 0 && (
           <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-white/20">
-            <div className="h-full bg-[#ff7a1a]" style={{ width: `${Math.min(100, progressPct)}%` }} />
+            <div className="h-full bg-[var(--aj-acc)]" style={{ width: `${Math.min(100, progressPct)}%` }} />
           </div>
         )}
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13px] font-semibold text-white/90">
-          <span className="text-[#ff7a1a]">EP {number}</span>
+          <span className="text-[var(--aj-acc)]">EP {number}</span>
           {title ? ` · ${title}` : ''}
         </p>
         <p className="mt-0.5 text-[11px] text-white/40">
@@ -183,7 +183,7 @@ export function EpisodeItem({
         </p>
       </div>
       {!unreleased && (
-        <span className="mr-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.06] text-white/70 transition group-hover:bg-[#ff7a1a] group-hover:text-black">
+        <span className="mr-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.06] text-white/70 transition group-hover:bg-[var(--aj-acc)] group-hover:text-black">
           <IconPlay size={13} />
         </span>
       )}
@@ -204,7 +204,7 @@ export function CardSkeleton() {
 export function Spinner({ label }: { label?: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-16 text-white/50">
-      <IconLoader size={30} className="aj-spin text-[#ff7a1a]" />
+      <IconLoader size={30} className="aj-spin text-[var(--aj-acc)]" />
       {label && <p className="text-sm">{label}</p>}
     </div>
   );

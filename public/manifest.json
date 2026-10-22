@@ -1,16 +1,23 @@
 {
-  "name": "Ajest — Anime, Unbound",
+  "name": "Ajest \u2014 Anime, Unbound",
   "short_name": "Ajest",
-  "description": "Premium anime streaming with simulcast countdowns, triple-tier catalog (AniList → Jikan → Consumet) and a triple-fallback HLS player.",
+  "description": "Premium anime streaming \u2014 simulcast schedule, multi-source playback and your personal library on any device.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone", "fullscreen"],
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "fullscreen"
+  ],
   "orientation": "any",
   "background_color": "#0b0d12",
   "theme_color": "#0b0d12",
-  "categories": ["entertainment", "video"],
+  "categories": [
+    "entertainment",
+    "video"
+  ],
   "icons": [
     {
       "src": "/ajest-icon.svg",
@@ -30,13 +37,25 @@
       "name": "Simulcast Schedule",
       "short_name": "Simulcast",
       "url": "/?view=schedule",
-      "icons": [{ "src": "/ajest-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+      "icons": [
+        {
+          "src": "/ajest-icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
     },
     {
       "name": "Search",
       "short_name": "Search",
       "url": "/?view=search",
-      "icons": [{ "src": "/ajest-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+      "icons": [
+        {
+          "src": "/ajest-icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
     }
   ]
 }

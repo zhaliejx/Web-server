@@ -53,7 +53,7 @@ export function LibraryView({
   return (
     <div className="mx-auto max-w-7xl px-4 pb-24 pt-6 md:px-8">
       <div className="aj-rise mb-8">
-        <div className="flex items-center gap-2.5 text-[#ff7a1a]">
+        <div className="flex items-center gap-2.5 text-[var(--aj-acc)]">
           {cfg.icon}
           <h1 className="text-2xl font-extrabold tracking-tight text-white md:text-3xl">{cfg.title}</h1>
           <span className="rounded-full bg-white/[0.07] px-2.5 py-0.5 text-[11px] font-bold text-white/60">{count}</span>
@@ -77,7 +77,7 @@ export function LibraryView({
               >
                 <button
                   onClick={() => onOpen(e.anime)}
-                  className="h-28 w-20 shrink-0 overflow-hidden rounded-xl bg-[#1c212c] ring-1 ring-white/[0.07] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff7a1a]"
+                  className="h-28 w-20 shrink-0 overflow-hidden rounded-xl bg-[#1c212c] ring-1 ring-white/[0.07] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--aj-acc)]"
                   aria-label={`Open ${e.anime.title}`}
                 >
                   {e.anime.cover && (
@@ -87,7 +87,7 @@ export function LibraryView({
                 </button>
                 <div className="min-w-0 flex-1">
                   <button onClick={() => onOpen(e.anime)} className="block w-full text-left">
-                    <p className="truncate text-[13.5px] font-bold text-white/90 hover:text-[#ffb37a]">{e.anime.title}</p>
+                    <p className="truncate text-[13.5px] font-bold text-white/90 hover:text-[var(--aj-acc-hi)]">{e.anime.title}</p>
                   </button>
                   <p className="mt-0.5 text-[11.5px] text-white/45">
                     EP {e.episode.number}
@@ -96,7 +96,7 @@ export function LibraryView({
                   <p className="mt-0.5 text-[11px] text-white/35">{fmtProgress(e.progress)}</p>
 
                   <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                    <div className="h-full rounded-full bg-[#ff7a1a]" style={{ width: `${pct}%` }} />
+                    <div className="h-full rounded-full bg-[var(--aj-acc)]" style={{ width: `${pct}%` }} />
                   </div>
                   <div className="mt-1 flex items-center justify-between text-[10.5px] text-white/35">
                     <span>{pct >= 95 ? 'Finished' : `${Math.round(pct)}% watched`}</span>
@@ -106,7 +106,7 @@ export function LibraryView({
                   <div className="mt-2.5 flex items-center gap-2">
                     <button
                       onClick={() => onPlay(e.anime)}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-[#ff7a1a] px-3.5 py-1.5 text-[11.5px] font-bold text-black transition hover:bg-[#ff8d3d]"
+                      className="inline-flex items-center gap-1.5 rounded-full bg-[var(--aj-acc)] px-3.5 py-1.5 text-[11.5px] font-bold text-black transition hover:bg-[var(--aj-acc-hi2)]"
                     >
                       <IconPlay size={11} /> Resume
                     </button>

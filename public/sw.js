@@ -4,8 +4,8 @@
    • Static assets (/_next/static, icons): cache-first.
    • /api/*: always network (live anime data + streams are never cached). */
 
-const CACHE = 'ajest-v1';
-const PRECACHE = ['/', '/ajest-icon.svg', '/ajest-maskable.svg', '/manifest.json'];
+const CACHE = 'ajest-v2';
+const PRECACHE = ['/', '/ajest-icon.svg', '/ajest-maskable.svg', '/logo.svg', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

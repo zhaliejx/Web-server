@@ -197,9 +197,21 @@ export default function Player({
     hasNextRef.current = hasNext;
   });
 
-  // Unified pause check across direct streams and embedded sources
+  // Unified pause check across direct streams and embedded sources.
+  // External embeds (vidlink/ani.pm/kaizen) have no <video> element — without
+  // the ext-aware branch isPaused() always reports "paused" and the chrome
+  // auto-hide timer never fires, leaving the title + source pills stuck on.
+  const extActiveRef = useRef(false);
+  useEffect(() => {
+    extActiveRef.current = !!extEmbed;
+  }, [extEmbed]);
   const isPaused = useCallback(
-    () => (ytActiveRef.current ? !ytInfo.current.playing : (videoRef.current?.paused ?? true)),
+    () =>
+      ytActiveRef.current
+        ? !ytInfo.current.playing
+        : extActiveRef.current
+          ? false
+          : (videoRef.current?.paused ?? true),
     []
   );
 
@@ -319,6 +331,10 @@ export default function Player({
       setBuffered(0);
       setPlaying(true);
       setPhase('playing');
+      // Arm the chrome auto-hide timer immediately — no mouse event will fire
+      // over the player on its own, so without this the title + source pills
+      // would stay visible forever (the exact "stuck pills" bug).
+      bumpControls();
       onProgress(0, 0);
       return;
     }
@@ -419,8 +435,8 @@ export default function Player({
       video.addEventListener('error', onFatal, { once: true });
       armWatchdog();
     }
-     
-  }, [onProgress]);
+
+  }, [onProgress, bumpControls]);
 
   // Register the attach implementation for recursive fallback calls
   useEffect(() => {
@@ -751,7 +767,7 @@ export default function Player({
   return (
     <div
       ref={shellRef}
-      className="fixed inset-0 z-[80] bg-black"
+      className="aj-player fixed inset-0 z-[80] select-none bg-black"
       onMouseMove={bumpControls}
       onClick={bumpControls}
       role="dialog"
@@ -815,15 +831,25 @@ export default function Player({
             referrerPolicy="origin"
             title={`Ajest — ${providerLabel(extEmbed.provider)}`}
           />
-          <div className="absolute bottom-5 right-4 z-30 flex items-center gap-2.5 rounded-full bg-black/70 px-3.5 py-1.5 text-[11.5px] font-semibold text-white/80 ring-1 ring-white/15 backdrop-blur">
+          {/* Wake strips — cross-origin iframes swallow mousemove, so these
+              thin strips above the iframe re-summon the chrome on hover/tap
+              while the middle of the screen stays fully interactive for the
+              upstream player's own controls. */}
+          <div className="absolute inset-x-0 top-0 z-[5] h-14" onMouseMove={bumpControls} onClick={bumpControls} />
+          <div className="absolute inset-x-0 bottom-0 z-[5] h-14" onMouseMove={bumpControls} onClick={bumpControls} />
+          <div
+            className={`absolute bottom-5 right-4 z-30 flex items-center gap-2.5 rounded-full bg-black/70 px-3.5 py-1.5 text-[11.5px] font-semibold text-white/80 ring-1 ring-white/15 backdrop-blur transition-opacity duration-300 ${
+              showControls || phase !== 'playing' ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+          >
             <span className="inline-flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-[#4ade80]" /> {providerLabel(extEmbed.provider)}
             </span>
-            <button onClick={() => extNextRef.current?.()} className="text-[#ffb37a] transition hover:text-white">
+            <button onClick={() => extNextRef.current?.()} className="text-[var(--aj-acc-hi)] transition hover:text-white">
               switch provider
             </button>
             {hasNext && (
-              <button onClick={onNextEpisode} className="text-[#ffb37a] transition hover:text-white">
+              <button onClick={onNextEpisode} className="text-[var(--aj-acc-hi)] transition hover:text-white">
                 next ep
               </button>
             )}
@@ -839,7 +865,7 @@ export default function Player({
           }`}
           onClick={ytEmbed ? togglePlay : undefined}
         >
-          <IconLoader size={44} className="aj-spin text-[#ff7a1a]" />
+          <IconLoader size={44} className="aj-spin text-[var(--aj-acc)]" />
           <div className="text-center">
             <p className="text-sm font-semibold text-white/90">
               {phase === 'resolving' ? 'Resolving stream providers…' : 'Buffering stream…'}
@@ -862,12 +888,12 @@ export default function Player({
                     className={`inline-flex items-center gap-2 rounded-full px-3 py-1 ${
                       p.ok
                         ? isActive
-                          ? 'bg-[#ff7a1a]/15 text-[#ffb37a] ring-1 ring-[#ff7a1a]/40'
+                          ? 'bg-[var(--aj-acc-15)] text-[var(--aj-acc-hi)] ring-1 ring-[var(--aj-acc-40)]'
                           : 'bg-white/[0.05] text-white/50'
                         : 'bg-white/[0.03] text-white/30'
                     }`}
                   >
-                    <span className={`h-1.5 w-1.5 rounded-full ${p.ok ? (isActive ? 'bg-[#ff7a1a]' : 'bg-[#4ade80]') : 'bg-white/25'}`} />
+                    <span className={`h-1.5 w-1.5 rounded-full ${p.ok ? (isActive ? 'bg-[var(--aj-acc)]' : 'bg-[#4ade80]') : 'bg-white/25'}`} />
                     {providerLabel(p.provider)}
                     {!p.ok && !p.provider.startsWith('youtube') && (
                       <span className="opacity-60">· {p.error?.slice(0, 40)}</span>
@@ -878,7 +904,7 @@ export default function Player({
               })}
             </ul>
           )}
-          {fallbackNote && <p className="text-[12px] text-[#ffb37a]">{fallbackNote}</p>}
+          {fallbackNote && <p className="text-[12px] text-[var(--aj-acc-hi)]">{fallbackNote}</p>}
         </div>
       )}
 
@@ -929,7 +955,7 @@ export default function Player({
                   })
                   .catch(() => setPhase('error'));
               }}
-              className="inline-flex items-center gap-2 rounded-full bg-[#ff7a1a] px-5 py-2.5 text-[13px] font-bold text-black transition hover:bg-[#ff8d3d]"
+              className="inline-flex items-center gap-2 rounded-full bg-[var(--aj-acc)] px-5 py-2.5 text-[13px] font-bold text-black transition hover:bg-[var(--aj-acc-hi2)]"
             >
               <IconRefresh size={14} /> Retry chain
             </button>
@@ -944,7 +970,7 @@ export default function Player({
       )}
 
       {/* ── Top bar ── */}
-      <div className={`absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/85 to-transparent p-4 md:p-5 transition-opacity duration-300 ${showControls || phase !== 'playing' ? 'opacity-100' : 'opacity-0'}`}>
+      <div className={`absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/85 to-transparent p-4 transition-opacity duration-300 md:p-5 ${showControls || phase !== 'playing' ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="truncate text-sm font-bold text-white md:text-base">{anime.title}</p>
@@ -996,7 +1022,7 @@ export default function Player({
         >
           <div className="relative h-1.5 rounded-full bg-white/20 transition-all group-hover/seek:h-2.5">
             <div className="absolute inset-y-0 left-0 rounded-full bg-white/25" style={{ width: `${bufPct}%` }} />
-            <div className="absolute inset-y-0 left-0 rounded-full bg-[#ff7a1a]" style={{ width: `${pct}%` }} />
+            <div className="absolute inset-y-0 left-0 rounded-full bg-[var(--aj-acc)]" style={{ width: `${pct}%` }} />
             <span
               className="absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full bg-white opacity-0 shadow transition-opacity group-hover/seek:opacity-100"
               style={{ left: `calc(${pct}% - 7px)` }}
@@ -1013,7 +1039,7 @@ export default function Player({
         </div>
 
         <div className="flex items-center gap-2 md:gap-3.5">
-          <button onClick={togglePlay} className="text-white transition hover:text-[#ff7a1a]" aria-label={playing ? 'Pause' : 'Play'}>
+          <button onClick={togglePlay} className="text-white transition hover:text-[var(--aj-acc)]" aria-label={playing ? 'Pause' : 'Play'}>
             {playing ? <IconPause size={24} /> : <IconPlay size={24} />}
           </button>
           <button onClick={() => seekBy(-10)} className="text-white/85 transition hover:text-white" aria-label="Back 10 seconds">
@@ -1070,7 +1096,7 @@ export default function Player({
                   v.muted = parseFloat(e.target.value) === 0;
                 }
               }}
-              className="h-1 w-0 cursor-pointer appearance-none rounded-full bg-white/25 opacity-0 transition-all duration-300 group-hover/vol:w-20 group-hover/vol:opacity-100 accent-[#ff7a1a] md:w-16 md:opacity-100"
+              className="h-1 w-0 cursor-pointer appearance-none rounded-full bg-white/25 opacity-0 transition-all duration-300 group-hover/vol:w-20 group-hover/vol:opacity-100 accent-[var(--aj-acc)] md:w-16 md:opacity-100"
               aria-label="Volume"
             />
           </div>
@@ -1085,7 +1111,7 @@ export default function Player({
           <div className="relative">
             <button
               onClick={() => setSettingsOpen((o) => !o)}
-              className={`transition ${settingsOpen ? 'text-[#ff7a1a]' : 'text-white/85 hover:text-white'}`}
+              className={`transition ${settingsOpen ? 'text-[var(--aj-acc)]' : 'text-white/85 hover:text-white'}`}
               aria-label="Playback settings"
               aria-expanded={settingsOpen}
             >
@@ -1100,7 +1126,7 @@ export default function Player({
                       key={l.index}
                       onClick={() => changeLevel(l.index)}
                       className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition hover:bg-white/[0.07] ${
-                        activeLevel === l.index ? 'text-[#ff7a1a] font-semibold' : 'text-white/80'
+                        activeLevel === l.index ? 'text-[var(--aj-acc)] font-semibold' : 'text-white/80'
                       }`}
                     >
                       {l.height}p {activeLevel === l.index && <IconCheck size={13} />}
@@ -1112,7 +1138,7 @@ export default function Player({
                 <button
                   onClick={() => changeLevel(-1)}
                   className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition hover:bg-white/[0.07] ${
-                    activeLevel === -1 ? 'text-[#ff7a1a] font-semibold' : 'text-white/80'
+                    activeLevel === -1 ? 'text-[var(--aj-acc)] font-semibold' : 'text-white/80'
                   }`}
                 >
                   Auto {activeLevel === -1 && <IconCheck size={13} />}
@@ -1123,7 +1149,7 @@ export default function Player({
                     key={s}
                     onClick={() => changeSpeed(s)}
                     className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[12.5px] transition hover:bg-white/[0.07] ${
-                      speed === s ? 'text-[#ff7a1a] font-semibold' : 'text-white/80'
+                      speed === s ? 'text-[var(--aj-acc)] font-semibold' : 'text-white/80'
                     }`}
                   >
                     {s}× {speed === s && <IconCheck size={13} />}
@@ -1136,7 +1162,7 @@ export default function Player({
           {hasNext && (
             <button
               onClick={onNextEpisode}
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-[12px] font-semibold text-white/85 transition hover:bg-[#ff7a1a] hover:text-black"
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-[12px] font-semibold text-white/85 transition hover:bg-[var(--aj-acc)] hover:text-black"
             >
               Next EP <IconSkipForward size={13} />
             </button>
@@ -1148,7 +1174,7 @@ export default function Player({
         </div>
 
         {fallbackNote && phase === 'playing' && (
-          <p className="mt-1.5 text-center text-[11px] text-[#ffb37a]/80">{fallbackNote}</p>
+          <p className="mt-1.5 text-center text-[11px] text-[var(--aj-acc-hi-80)]">{fallbackNote}</p>
         )}
       </div>
     </div>

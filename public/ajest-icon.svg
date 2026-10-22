@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
   <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFB347"/>
-      <stop offset="45%" stop-color="#FF7A1A"/>
-      <stop offset="100%" stop-color="#F4511E"/>
+    <linearGradient id="t" x1="12%" y1="0%" x2="88%" y2="100%">
+      <stop offset="0%" stop-color="#ff8d3d"/>
+      <stop offset="55%" stop-color="#ff7a1a"/>
+      <stop offset="100%" stop-color="#9e4c10"/>
     </linearGradient>
   </defs>
-  <rect width="48" height="48" rx="11" fill="#0B0D12"/>
-  <path d="M24 7 L40.5 40.5 H7.5 Z" fill="url(#g)" stroke="url(#g)" stroke-width="2.6" stroke-linejoin="round"/>
-  <path d="M17.4 31 H30.6" stroke="#0B0D12" stroke-width="3" stroke-linecap="round"/>
-  <circle cx="24" cy="21.6" r="2.9" fill="#0B0D12"/>
+  <rect x="1" y="1" width="46" height="46" rx="13" fill="url(#t)"/>
+  <rect x="1.5" y="1.5" width="45" height="45" rx="12.5" fill="none" stroke="#ffffff" stroke-opacity="0.16" stroke-width="1"/>
+  <path d="M19.4 16.9a1.9 1.9 0 0 1 2.85-1.64l11.5 7.1a1.9 1.9 0 0 1 0 3.28l-11.5 7.1a1.9 1.9 0 0 1-2.85-1.64z" fill="#ffffff"/>
+  <circle cx="36.6" cy="11.4" r="2.5" fill="#ffffff" opacity="0.9"/>
 </svg>

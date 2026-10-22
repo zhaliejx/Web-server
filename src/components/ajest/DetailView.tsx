@@ -83,7 +83,7 @@ export function DetailView({ anime, onBack, onPlay, onOpen }: Props) {
         <div className="absolute inset-0 bg-gradient-to-t from-[#0b0d12] via-[#0b0d12]/45 to-[#0b0d12]/20" />
         <button
           onClick={onBack}
-          className="absolute left-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/55 px-4 py-2 text-[13px] font-semibold text-white/90 backdrop-blur transition hover:bg-black/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff7a1a]"
+          className="absolute left-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/55 px-4 py-2 text-[13px] font-semibold text-white/90 backdrop-blur transition hover:bg-black/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--aj-acc)]"
           aria-label="Go back"
         >
           <IconChevronLeft size={16} /> Back
@@ -157,7 +157,7 @@ export function DetailView({ anime, onBack, onPlay, onOpen }: Props) {
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <button
                 onClick={() => onPlay(merged, history?.episode.number || 1)}
-                className="inline-flex items-center gap-2 rounded-full bg-[#ff7a1a] px-6 py-2.5 text-[13.5px] font-bold text-black transition hover:bg-[#ff8d3d] hover:scale-[1.03] active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                className="inline-flex items-center gap-2 rounded-full bg-[var(--aj-acc)] px-6 py-2.5 text-[13.5px] font-bold text-black transition hover:bg-[var(--aj-acc-hi2)] hover:scale-[1.03] active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
               >
                 <IconPlay size={15} /> {history ? `Resume EP ${history.episode.number}` : 'Start Watching'}
               </button>
@@ -177,7 +177,7 @@ export function DetailView({ anime, onBack, onPlay, onOpen }: Props) {
                 aria-pressed={later}
                 className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[13.5px] font-semibold transition hover:scale-[1.03] active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
                   later
-                    ? 'bg-[#ff7a1a]/15 text-[#ffb37a] ring-1 ring-[#ff7a1a]/40'
+                    ? 'bg-[var(--aj-acc-15)] text-[var(--aj-acc-hi)] ring-1 ring-[var(--aj-acc-40)]'
                     : 'bg-white/[0.07] text-white/85 hover:bg-white/[0.13]'
                 }`}
               >
@@ -187,8 +187,8 @@ export function DetailView({ anime, onBack, onPlay, onOpen }: Props) {
 
             {/* Next episode countdown */}
             {merged.nextEpisodeAt && merged.nextEpisodeAt * 1000 > now && (
-              <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#ff7a1a]/25 bg-[#ff7a1a]/[0.06] px-4 py-2 text-[13px] text-[#ffb37a]">
-                <span className="aj-live-dot h-2 w-2 rounded-full bg-[#ff7a1a]" />
+              <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[var(--aj-acc-25)] bg-[var(--aj-acc)]/[0.06] px-4 py-2 text-[13px] text-[var(--aj-acc-hi)]">
+                <span className="aj-live-dot h-2 w-2 rounded-full bg-[var(--aj-acc)]" />
                 Next episode in{' '}
                 <Countdown target={merged.nextEpisodeAt} />
               </div>
@@ -205,7 +205,7 @@ export function DetailView({ anime, onBack, onPlay, onOpen }: Props) {
           {cleanDescription(merged.description).length > 260 && (
             <button
               onClick={() => setExpanded((e) => !e)}
-              className="mt-1.5 text-[12px] font-semibold text-[#ff7a1a] hover:underline"
+              className="mt-1.5 text-[12px] font-semibold text-[var(--aj-acc)] hover:underline"
             >
               {expanded ? 'Show less' : 'Read more'}
             </button>
@@ -270,7 +270,7 @@ export function DetailView({ anime, onBack, onPlay, onOpen }: Props) {
                 <button
                   key={r.id}
                   onClick={() => onOpen(r)}
-                  className="aj-card-hover group text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff7a1a] rounded-xl"
+                  className="aj-card-hover group text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--aj-acc)] rounded-xl"
                   aria-label={`Open ${r.title}`}
                 >
                   <div className="aspect-[2/3] overflow-hidden rounded-xl ring-1 ring-white/[0.07] bg-[#171b24]">
@@ -279,7 +279,7 @@ export function DetailView({ anime, onBack, onPlay, onOpen }: Props) {
                       <img src={r.cover} alt={r.title} loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
                     )}
                   </div>
-                  <p className="mt-1.5 line-clamp-2 text-[12px] font-medium text-white/75 group-hover:text-[#ffb37a]">{r.title}</p>
+                  <p className="mt-1.5 line-clamp-2 text-[12px] font-medium text-white/75 group-hover:text-[var(--aj-acc-hi)]">{r.title}</p>
                 </button>
               ))}
             </div>

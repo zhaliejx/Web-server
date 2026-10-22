@@ -60,7 +60,7 @@ export function SearchView({
     <div className="mx-auto max-w-7xl px-4 pb-24 pt-6 md:px-8">
       <div className="aj-rise mb-7">
         <h1 className="mb-4 flex items-center gap-2.5 text-2xl font-extrabold tracking-tight text-white md:text-3xl">
-          <span className="text-[#ff7a1a]"><IconSearch size={22} /></span> Search
+          <span className="text-[var(--aj-acc)]"><IconSearch size={22} /></span> Search
         </h1>
 
         <form
@@ -79,7 +79,7 @@ export function SearchView({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search any anime — triple-tier engine: AniList → Kitsu → gogoanime.by"
-            className="w-full rounded-2xl border border-white/10 bg-[#14171f] py-3.5 pl-11 pr-11 text-[14px] text-white placeholder:text-white/30 focus:border-[#ff7a1a]/60 focus:outline-none focus:ring-2 focus:ring-[#ff7a1a]/25"
+            className="w-full rounded-2xl border border-white/10 bg-[#14171f] py-3.5 pl-11 pr-11 text-[14px] text-white placeholder:text-white/30 focus:border-[var(--aj-acc-60)] focus:outline-none focus:ring-2 focus:ring-[var(--aj-acc-25)]"
             aria-label="Search anime"
           />
           {query && (

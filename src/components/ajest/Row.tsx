@@ -51,7 +51,7 @@ export function Row({ title, items, onOpen, badge, icon, subtitle }: RowProps) {
     <section className="aj-rise group/row relative" aria-label={title}>
       <div className="mb-3 flex items-end justify-between px-4 md:px-8">
         <div className="flex items-center gap-2.5">
-          {icon && <span className="text-[#ff7a1a]">{icon}</span>}
+          {icon && <span className="text-[var(--aj-acc)]">{icon}</span>}
           <h2 className="text-[17px] md:text-xl font-bold tracking-tight text-white/95">{title}</h2>
           {subtitle && <span className="hidden md:inline text-xs text-white/35 pb-0.5">{subtitle}</span>}
         </div>
@@ -59,7 +59,7 @@ export function Row({ title, items, onOpen, badge, icon, subtitle }: RowProps) {
           <button
             onClick={() => scrollBy(-1)}
             disabled={!canLeft}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.07] text-white/80 transition hover:bg-[#ff7a1a] hover:text-black disabled:opacity-25 disabled:hover:bg-white/[0.07] disabled:hover:text-white/80"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.07] text-white/80 transition hover:bg-[var(--aj-acc)] hover:text-black disabled:opacity-25 disabled:hover:bg-white/[0.07] disabled:hover:text-white/80"
             aria-label={`Scroll ${title} left`}
           >
             <IconChevronLeft size={16} />
@@ -67,7 +67,7 @@ export function Row({ title, items, onOpen, badge, icon, subtitle }: RowProps) {
           <button
             onClick={() => scrollBy(1)}
             disabled={!canRight}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.07] text-white/80 transition hover:bg-[#ff7a1a] hover:text-black disabled:opacity-25 disabled:hover:bg-white/[0.07] disabled:hover:text-white/80"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.07] text-white/80 transition hover:bg-[var(--aj-acc)] hover:text-black disabled:opacity-25 disabled:hover:bg-white/[0.07] disabled:hover:text-white/80"
             aria-label={`Scroll ${title} right`}
           >
             <IconChevronRight size={16} />

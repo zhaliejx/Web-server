@@ -39,20 +39,20 @@ function Svg({
   );
 }
 
-// ── Brand mark: geometric "A" that doubles as a play glyph ──────────────────
+// ── Brand mark: gradient app tile with a play glyph + broadcast spark ────────
+// Theme-aware: the tile inherits the user's accent (--aj-acc* variables), so
+// switching themes recolors the logo everywhere. Same design as the static
+// /ajest-icon.svg favicon, which keeps the default Ember palette.
 export function AjestMark({
   size = 44,
   className,
-  animated = false,
 }: {
   size?: number;
   className?: string;
-  animated?: boolean;
 }) {
+  // Unique gradient id per instance — several marks can coexist in the DOM
   const uid = useId().replace(/[:]/g, '');
-  const gradId = `aj-g-${uid}`;
-  const glowId = `aj-gl-${uid}`;
-  const shineId = `aj-sh-${uid}`;
+  const tileId = `aj-tile-${uid}`;
   return (
     <svg
       width={size}
@@ -63,58 +63,22 @@ export function AjestMark({
       aria-label="Ajest logo"
     >
       <defs>
-        <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#FFC15E" />
-          <stop offset="42%" stopColor="#FF7A1A" />
-          <stop offset="100%" stopColor="#E8442A" />
+        <linearGradient id={tileId} x1="12%" y1="0%" x2="88%" y2="100%">
+          <stop offset="0%" style={{ stopColor: 'var(--aj-acc-hi2, #ff8d3d)' }} />
+          <stop offset="55%" style={{ stopColor: 'var(--aj-acc, #ff7a1a)' }} />
+          <stop offset="100%" style={{ stopColor: 'var(--aj-acc-deep, #9e4c10)' }} />
         </linearGradient>
-        <linearGradient id={shineId} x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.34" />
-          <stop offset="52%" stopColor="#ffffff" stopOpacity="0.05" />
-          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
-        </linearGradient>
-        <filter id={glowId} x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur stdDeviation="2.2" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
       </defs>
-      {/* Rounded "A" triangle badge with a knocked-out play button */}
+      {/* Rounded gradient tile with a crisp inner edge */}
+      <rect x="1" y="1" width="46" height="46" rx="13" fill={`url(#${tileId})`} />
+      <rect x="1.5" y="1.5" width="45" height="45" rx="12.5" fill="none" stroke="#ffffff" strokeOpacity="0.16" strokeWidth="1" />
+      {/* Play triangle — optical center */}
       <path
-        d="M22.1 7.9a2.2 2.2 0 0 1 3.8 0l16.4 28.6a2.2 2.2 0 0 1-1.9 3.3H7.6a2.2 2.2 0 0 1-1.9-3.3L22.1 7.9Z"
-        fill={`url(#${gradId})`}
-        stroke={`url(#${gradId})`}
-        strokeWidth={animated ? 3.4 : 0}
-        strokeLinejoin="round"
-        className={animated ? 'aj-draw aj-draw-1' : undefined}
-        filter={animated ? `url(#${glowId})` : undefined}
-        style={animated ? { fillOpacity: 0 } : undefined}
+        d="M19.4 16.9a1.9 1.9 0 0 1 2.85-1.64l11.5 7.1a1.9 1.9 0 0 1 0 3.28l-11.5 7.1a1.9 1.9 0 0 1-2.85-1.64z"
+        fill="#ffffff"
       />
-      {/* Top sheen — gives the badge depth */}
-      <path
-        d="M22.1 7.9a2.2 2.2 0 0 1 3.8 0l8.5 14.8H13.6l8.5-14.8Z"
-        fill={`url(#${shineId})`}
-        className={animated ? 'aj-fade' : undefined}
-      />
-      {/* Negative-space play triangle — the A crossbar becomes the play cut */}
-      <path
-        d="M20.2 21.6a1.7 1.7 0 0 1 2.56-1.47l9.1 5.4a1.7 1.7 0 0 1 0 2.94l-9.1 5.4a1.7 1.7 0 0 1-2.56-1.47v-10.8Z"
-        fill="#0B0D12"
-        className={animated ? 'aj-draw aj-draw-2' : undefined}
-        style={animated ? { fillOpacity: 0 } : undefined}
-      />
-      {/* Broadcast spark — anime antenna accent */}
-      <circle
-        cx="38.4"
-        cy="9.2"
-        r={2.3}
-        fill={`url(#${gradId})`}
-        className={animated ? 'aj-pop' : undefined}
-        style={animated ? { transformOrigin: '38.4px 9.2px' } : undefined}
-      />
-      <circle cx="38.4" cy="9.2" r={4.1} fill="#FF7A1A" opacity={0.25} className={animated ? 'aj-pop' : undefined} style={animated ? { transformOrigin: '38.4px 9.2px' } : undefined} />
+      {/* Broadcast spark */}
+      <circle cx="36.6" cy="11.4" r="2.5" fill="#ffffff" opacity="0.9" />
     </svg>
   );
 }

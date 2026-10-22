@@ -1,14 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
   <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFB347"/>
-      <stop offset="45%" stop-color="#FF7A1A"/>
-      <stop offset="100%" stop-color="#F4511E"/>
+    <linearGradient id="t" x1="12%" y1="0%" x2="88%" y2="100%">
+      <stop offset="0%" stop-color="#ff8d3d"/>
+      <stop offset="55%" stop-color="#ff7a1a"/>
+      <stop offset="100%" stop-color="#9e4c10"/>
     </linearGradient>
   </defs>
-  <rect width="48" height="48" fill="#0B0D12"/>
-  <!-- Mark inset to the maskable safe zone (80% center circle) -->
-  <path d="M24 10 L37.5 38 H10.5 Z" fill="url(#g)" stroke="url(#g)" stroke-width="2.2" stroke-linejoin="round"/>
-  <path d="M18.6 30.5 H29.4" stroke="#0B0D12" stroke-width="2.6" stroke-linecap="round"/>
-  <circle cx="24" cy="23" r="2.4" fill="#0B0D12"/>
+  <rect width="48" height="48" fill="url(#t)"/>
+  <path d="M20.2 18.6a1.6 1.6 0 0 1 2.4-1.38l9.65 5.96a1.6 1.6 0 0 1 0 2.76l-9.65 5.96a1.6 1.6 0 0 1-2.4-1.38z" fill="#ffffff"/>
+  <circle cx="35.4" cy="13" r="2.1" fill="#ffffff" opacity="0.9"/>
 </svg>

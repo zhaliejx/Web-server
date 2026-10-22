@@ -15,11 +15,11 @@ function CountdownChip({ airingAt, now }: { airingAt: number; now: number }) {
         live
           ? 'bg-[#4ade80]/15 text-[#4ade80]'
           : airingAt * 1000 - now < 3600_000
-            ? 'bg-[#ff7a1a]/15 text-[#ffb37a]'
+            ? 'bg-[var(--aj-acc-15)] text-[var(--aj-acc-hi)]'
             : 'bg-white/[0.07] text-white/70'
       }`}
     >
-      <span className={`h-1.5 w-1.5 rounded-full ${live ? 'bg-[#4ade80] aj-live-dot' : 'bg-[#ff7a1a]'}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${live ? 'bg-[#4ade80] aj-live-dot' : 'bg-[var(--aj-acc)]'}`} />
       {live ? 'Airing now' : `T-${text}`}
     </span>
   );
@@ -74,7 +74,7 @@ export function ScheduleView({ onOpen }: { onOpen: (a: AnimeCardType) => void })
       <div className="aj-rise mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <span className="text-[#ff7a1a]"><IconSatellite size={22} /></span>
+            <span className="text-[var(--aj-acc)]"><IconSatellite size={22} /></span>
             <h1 className="text-2xl font-extrabold tracking-tight text-white md:text-3xl">Simulcast Schedule</h1>
           </div>
           <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-white/50">
@@ -104,12 +104,12 @@ export function ScheduleView({ onOpen }: { onOpen: (a: AnimeCardType) => void })
               onClick={() => setDayFilter(d)}
               className={`flex min-w-[86px] flex-col items-center rounded-2xl border px-4 py-2.5 transition ${
                 active
-                  ? 'border-[#ff7a1a]/60 bg-[#ff7a1a]/10 text-white'
+                  ? 'border-[var(--aj-acc-60)] bg-[var(--aj-acc-10)] text-white'
                   : 'border-white/[0.07] bg-white/[0.03] text-white/60 hover:border-white/20 hover:text-white/85'
               }`}
             >
               <span className="text-[13px] font-bold">{label}</span>
-              <span className={`mt-0.5 text-[10.5px] ${active ? 'text-[#ffb37a]' : 'text-white/35'}`}>
+              <span className={`mt-0.5 text-[10.5px] ${active ? 'text-[var(--aj-acc-hi)]' : 'text-white/35'}`}>
                 {count} airing
               </span>
             </button>
@@ -120,14 +120,14 @@ export function ScheduleView({ onOpen }: { onOpen: (a: AnimeCardType) => void })
       {/* Content */}
       {loading ? (
         <div className="flex flex-col items-center justify-center gap-3 py-24 text-white/50">
-          <IconLoader size={34} className="aj-spin text-[#ff7a1a]" />
+          <IconLoader size={34} className="aj-spin text-[var(--aj-acc)]" />
           <p className="text-sm">Syncing weekly airing timeline…</p>
         </div>
       ) : error ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/[0.07] bg-[#14171f] py-16 text-white/55">
           <IconAlert size={26} className="text-[#ff6b70]" />
           <p className="text-sm">{error}</p>
-          <button onClick={load} className="rounded-full bg-[#ff7a1a] px-5 py-2 text-[12.5px] font-bold text-black">
+          <button onClick={load} className="rounded-full bg-[var(--aj-acc)] px-5 py-2 text-[12.5px] font-bold text-black">
             Retry
           </button>
         </div>
@@ -148,10 +148,10 @@ export function ScheduleView({ onOpen }: { onOpen: (a: AnimeCardType) => void })
                 <button
                   key={`${s.id}-${s.episodeNo}`}
                   onClick={() => onOpen(s)}
-                  className={`aj-card-hover group flex gap-3.5 rounded-2xl border p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff7a1a] ${
+                  className={`aj-card-hover group flex gap-3.5 rounded-2xl border p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--aj-acc)] ${
                     released
                       ? 'border-white/[0.07] bg-[#14171f]'
-                      : 'border-[#ff7a1a]/20 bg-gradient-to-br from-[#171b24] to-[#1a1520]'
+                      : 'border-[var(--aj-acc-20)] bg-gradient-to-br from-[#171b24] to-[#1a1520]'
                   }`}
                 >
                   <div className="h-24 w-16 shrink-0 overflow-hidden rounded-xl bg-[#1c212c] ring-1 ring-white/[0.07]">
@@ -161,7 +161,7 @@ export function ScheduleView({ onOpen }: { onOpen: (a: AnimeCardType) => void })
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-[13px] font-bold leading-snug text-white/90 group-hover:text-[#ffb37a]">
+                    <p className="line-clamp-2 text-[13px] font-bold leading-snug text-white/90 group-hover:text-[var(--aj-acc-hi)]">
                       {s.title}
                     </p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-white/45">

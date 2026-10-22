@@ -89,7 +89,7 @@ export function AppControls({ compact = false }: { compact?: boolean }) {
       {installEvt && (
         <button
           onClick={install}
-          className={`inline-flex items-center gap-1.5 rounded-full bg-[#ff7a1a] px-3.5 py-2 text-[12px] font-bold text-black transition hover:bg-[#ff8d3d] focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${compact ? 'px-3' : ''}`}
+          className={`inline-flex items-center gap-1.5 rounded-full bg-[var(--aj-acc)] px-3.5 py-2 text-[12px] font-bold text-black transition hover:bg-[var(--aj-acc-hi2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${compact ? 'px-3' : ''}`}
           aria-label="Install Ajest as an app"
           title="Install Ajest as an app"
         >
@@ -98,12 +98,12 @@ export function AppControls({ compact = false }: { compact?: boolean }) {
         </button>
       )}
 
-      {/* Streaming source toggles */}
+      {/* Streaming source toggles + appearance */}
       <button
         onClick={() => setSourcesOpen(true)}
-        aria-label="Streaming source settings"
-        title="Streaming sources"
-        className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.07] text-white/75 transition hover:bg-white/[0.14] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff7a1a]"
+        aria-label="Settings — sources, theme and credits"
+        title="Settings"
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.09] text-white/80 ring-1 ring-white/10 transition hover:bg-white/[0.16] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--aj-acc)]"
       >
         <IconGear size={17} />
       </button>
@@ -114,9 +114,9 @@ export function AppControls({ compact = false }: { compact?: boolean }) {
         aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
         aria-pressed={isFullscreen}
         title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen app (F)'}
-        className={`flex h-9 w-9 items-center justify-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ff7a1a] ${
+        className={`flex h-9 w-9 items-center justify-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--aj-acc)] ${
           isFullscreen
-            ? 'bg-[#ff7a1a]/20 text-[#ffb37a] ring-1 ring-[#ff7a1a]/40'
+            ? 'bg-[var(--aj-acc-20)] text-[var(--aj-acc-hi)] ring-1 ring-[var(--aj-acc-40)]'
             : 'bg-white/[0.07] text-white/75 hover:bg-white/[0.14] hover:text-white'
         }`}
       >

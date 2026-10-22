@@ -2,8 +2,8 @@
 
 import dynamic from 'next/dynamic';
 
-// Client-only: the app reads localStorage (user libraries) and runs the
-// cinematic splash sequence, so SSR is intentionally skipped.
+// Client-only: the app reads localStorage (user libraries + theme), so SSR
+// is intentionally skipped. Content renders immediately — no bootup screen.
 const AjestApp = dynamic(() => import('@/components/ajest/AjestApp'), {
   ssr: false,
   loading: () => (

@@ -30,7 +30,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ── Ajest dark theme (Crunchyroll-inspired: deep charcoal + ember orange) ── */
+/* ── Ajest dark theme (deep charcoal base; accent driven by --aj-acc) ──────── */
 :root,
 .dark {
   --radius: 0.75rem;
@@ -40,18 +40,78 @@
   --card-foreground: #f2f4f8;
   --popover: #171b24;
   --popover-foreground: #f2f4f8;
-  --primary: #ff7a1a;
+  --primary: var(--aj-acc);
   --primary-foreground: #0b0d12;
   --secondary: #1c212c;
   --secondary-foreground: #e6e9f0;
   --muted: #171b24;
   --muted-foreground: #9aa3b2;
   --accent: #212736;
-  --accent-foreground: #ffb37a;
+  --accent-foreground: var(--aj-acc-hi);
   --destructive: #e5484d;
   --border: rgba(255, 255, 255, 0.08);
   --input: rgba(255, 255, 255, 0.1);
-  --ring: #ff7a1a;
+  --ring: var(--aj-acc);
+}
+
+/* ── Accent system — one variable drives every highlight in the app ──────────
+   The default (no data-aj-theme attribute) is Ember orange. The alpha tones
+   are derived with color-mix() so themes only override the three base hues. */
+:root {
+  --aj-acc: #ff7a1a;
+  --aj-acc-hi: #ffb37a;
+  --aj-acc-hi2: #ff8d3d;
+
+  --aj-acc-08: color-mix(in srgb, var(--aj-acc) 8%, transparent);
+  --aj-acc-10: color-mix(in srgb, var(--aj-acc) 10%, transparent);
+  --aj-acc-12: color-mix(in srgb, var(--aj-acc) 12%, transparent);
+  --aj-acc-15: color-mix(in srgb, var(--aj-acc) 15%, transparent);
+  --aj-acc-20: color-mix(in srgb, var(--aj-acc) 20%, transparent);
+  --aj-acc-25: color-mix(in srgb, var(--aj-acc) 25%, transparent);
+  --aj-acc-35: color-mix(in srgb, var(--aj-acc) 35%, transparent);
+  --aj-acc-40: color-mix(in srgb, var(--aj-acc) 40%, transparent);
+  --aj-acc-50: color-mix(in srgb, var(--aj-acc) 50%, transparent);
+  --aj-acc-60: color-mix(in srgb, var(--aj-acc) 60%, transparent);
+  --aj-acc-80: color-mix(in srgb, var(--aj-acc) 80%, transparent);
+  --aj-acc-hi-80: color-mix(in srgb, var(--aj-acc-hi) 80%, transparent);
+  --aj-acc-shadow: color-mix(in srgb, var(--aj-acc) 40%, transparent);
+  --aj-acc-deep: color-mix(in srgb, var(--aj-acc) 62%, #000);
+}
+
+[data-aj-theme='crimson'] {
+  --aj-acc: #e50914;
+  --aj-acc-hi: #ff8f96;
+  --aj-acc-hi2: #ff2d38;
+}
+[data-aj-theme='violet'] {
+  --aj-acc: #a855f7;
+  --aj-acc-hi: #d8b4fe;
+  --aj-acc-hi2: #c084fc;
+}
+[data-aj-theme='azure'] {
+  --aj-acc: #3b82f6;
+  --aj-acc-hi: #a5c8ff;
+  --aj-acc-hi2: #60a5fa;
+}
+[data-aj-theme='mint'] {
+  --aj-acc: #10b981;
+  --aj-acc-hi: #7ce8c3;
+  --aj-acc-hi2: #34d399;
+}
+[data-aj-theme='rose'] {
+  --aj-acc: #f43f5e;
+  --aj-acc-hi: #fda4af;
+  --aj-acc-hi2: #fb7185;
+}
+[data-aj-theme='gold'] {
+  --aj-acc: #d9a406;
+  --aj-acc-hi: #f3d060;
+  --aj-acc-hi2: #eab308;
+}
+[data-aj-theme='platinum'] {
+  --aj-acc: #e2e8f0;
+  --aj-acc-hi: #ffffff;
+  --aj-acc-hi2: #f8fafc;
 }
 
 html,
@@ -66,7 +126,18 @@ body {
 }
 
 ::selection {
-  background: rgba(255, 122, 26, 0.35);
+  background: var(--aj-acc-35);
+}
+
+/* Video player chrome must never capture taps or paint text selections —
+   "blue flash + random navigation" came from selectable overlay text and
+   invisible-but-clickable controls. */
+.aj-player {
+  -webkit-tap-highlight-color: transparent;
+}
+.aj-player * {
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* ── Scrollbars ────────────────────────────────────────────────────────────── */
@@ -95,233 +166,6 @@ body {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
-}
-
-/* ════════════════════════════════════════════════════════════════════════════
-   SPLASH — pure SVG/CSS cinematic startup
-   ════════════════════════════════════════════════════════════════════════════ */
-.aj-splash {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background:
-    radial-gradient(ellipse 80% 55% at 50% 38%, rgba(255, 122, 26, 0.09), transparent 65%),
-    radial-gradient(ellipse 60% 45% at 50% 105%, rgba(244, 81, 30, 0.1), transparent 60%),
-    #0b0d12;
-  transition: opacity 0.7s ease, transform 0.7s ease, filter 0.7s ease;
-}
-.aj-splash-exit {
-  opacity: 0;
-  transform: scale(1.06);
-  filter: blur(6px);
-  pointer-events: none;
-}
-.aj-splash-glow {
-  position: absolute;
-  border-radius: 9999px;
-  filter: blur(90px);
-  opacity: 0.5;
-  animation: aj-breathe 5s ease-in-out infinite;
-}
-.aj-splash-glow-1 {
-  width: 420px;
-  height: 420px;
-  top: 12%;
-  left: 50%;
-  transform: translateX(-50%);
-  background: radial-gradient(circle, rgba(255, 122, 26, 0.22), transparent 70%);
-}
-.aj-splash-glow-2 {
-  width: 320px;
-  height: 320px;
-  bottom: 6%;
-  right: 12%;
-  background: radial-gradient(circle, rgba(255, 179, 122, 0.1), transparent 70%);
-  animation-delay: 2s;
-}
-.aj-splash-core {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-  position: relative;
-  z-index: 2;
-}
-.aj-splash-logo {
-  filter: drop-shadow(0 0 26px rgba(255, 122, 26, 0.45));
-}
-
-/* Logo stroke draw-on (SVG stroke-dash) */
-.aj-draw {
-  stroke-dasharray: 240;
-  stroke-dashoffset: 240;
-  animation: aj-draw-in 1.15s cubic-bezier(0.65, 0, 0.35, 1) forwards, aj-fill-in 0.7s ease 1s forwards;
-}
-.aj-draw-2 {
-  animation-delay: 0.85s, 1.55s;
-}
-.aj-pop {
-  transform: scale(0);
-  animation: aj-pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 1.7s forwards;
-}
-@keyframes aj-draw-in {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-@keyframes aj-fill-in {
-  to {
-    fill-opacity: 1;
-  }
-}
-@keyframes aj-pop-in {
-  to {
-    transform: scale(1);
-  }
-}
-
-/* Wordmark letters stagger */
-.aj-splash-word {
-  display: flex;
-  gap: 0.32em;
-  margin-top: 1.4rem;
-  font-size: 1.9rem;
-  font-weight: 800;
-  letter-spacing: 0.42em;
-  text-indent: 0.42em;
-}
-.aj-splash-letter {
-  opacity: 0;
-  transform: translateY(14px);
-  animation: aj-letter-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  background: linear-gradient(180deg, #ffffff 30%, #ffb37a 130%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-@keyframes aj-letter-in {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.aj-splash-tagline {
-  margin-top: 0.55rem;
-  font-size: 0.78rem;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: #9aa3b2;
-  opacity: 0;
-  animation: aj-fade-up 0.6s ease 1.5s forwards;
-}
-
-/* Loading bar */
-.aj-splash-bar {
-  width: 250px;
-  height: 3px;
-  margin-top: 2.1rem;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.09);
-  overflow: hidden;
-  opacity: 0;
-  animation: aj-fade-up 0.6s ease 1.7s forwards;
-}
-.aj-splash-bar-fill {
-  height: 100%;
-  border-radius: 9999px;
-  background: linear-gradient(90deg, #ff7a1a, #ffb347, #ff7a1a);
-  background-size: 200% 100%;
-  animation: aj-shimmer 1.2s linear infinite;
-  transition: width 0.18s ease-out;
-}
-@keyframes aj-shimmer {
-  to {
-    background-position: -200% 0;
-  }
-}
-
-.aj-splash-status {
-  margin-top: 0.9rem;
-  font-size: 0.82rem;
-  color: #9aa3b2;
-  animation: aj-status-in 0.35s ease;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-@keyframes aj-status-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-}
-.aj-splash-dots::after {
-  content: '';
-  animation: aj-dots 1.4s steps(4, end) infinite;
-}
-@keyframes aj-dots {
-  0% { content: ''; }
-  25% { content: '.'; }
-  50% { content: '..'; }
-  75% { content: '...'; }
-}
-
-/* Service rows */
-.aj-splash-services {
-  margin-top: 1.35rem;
-  width: 268px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  opacity: 0;
-  animation: aj-fade-up 0.6s ease 1.9s forwards;
-}
-.aj-splash-services li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.72rem;
-  color: #8a93a6;
-  letter-spacing: 0.04em;
-  padding: 0.28rem 0.65rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
-}
-.aj-splash-svc-state {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 9999px;
-}
-.aj-splash-svc-state.is-wait { color: #9aa3b2; }
-.aj-splash-svc-state.is-ok { color: #4ade80; background: rgba(74, 222, 128, 0.12); }
-.aj-splash-svc-state.is-fail { color: #f87171; background: rgba(248, 113, 113, 0.12); }
-.aj-splash-svc-state.is-degraded { color: #fbbf24; background: rgba(251, 191, 36, 0.12); }
-li:has(.aj-splash-svc-state.is-degraded) .aj-splash-svc-label { opacity: 0.75; }
-.aj-splash-foot {
-  position: absolute;
-  bottom: 1.6rem;
-  font-size: 0.68rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #4a5164;
-}
-
-@keyframes aj-fade-up {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-@keyframes aj-breathe {
-  0%, 100% { opacity: 0.5; transform: translateX(-50%) scale(1); }
-  50% { opacity: 0.85; transform: translateX(-50%) scale(1.08); }
 }
 
 /* ── Shared bits ───────────────────────────────────────────────────────────── */
@@ -382,17 +226,7 @@ li:has(.aj-splash-svc-state.is-degraded) .aj-splash-svc-label { opacity: 0.75; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .aj-kenburns,
-  .aj-splash-glow {
+  .aj-kenburns {
     animation: none;
   }
-}
-
-/* AjestMark: late fade-in for the badge sheen (splash animation) */
-.aj-fade {
-  opacity: 0;
-  animation: aj-fade-in 0.6s ease 1.5s forwards;
-}
-@keyframes aj-fade-in {
-  to { opacity: 1; }
 }

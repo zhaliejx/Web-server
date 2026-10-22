@@ -103,7 +103,7 @@ export function HeroCarousel({
       <div className={`absolute bottom-0 left-0 right-0 px-4 pb-14 md:px-8 md:pb-20 transition-opacity duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100'}`}>
         <div className="max-w-2xl">
           <div className="mb-3 flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 rounded-md bg-[#ff7a1a] px-2 py-1 text-[10.5px] font-extrabold uppercase tracking-wider text-black">
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-[var(--aj-acc)] px-2 py-1 text-[10.5px] font-extrabold uppercase tracking-wider text-black">
               <IconFlame3 /> #{idx + 1} Trending Now
             </span>
             {current.score ? (
@@ -135,7 +135,7 @@ export function HeroCarousel({
           <div className="mt-6 flex items-center gap-3 flex-wrap">
             <button
               onClick={() => onPlay(current)}
-              className="inline-flex items-center gap-2 rounded-full bg-[#ff7a1a] px-7 py-3 text-sm font-bold text-black transition hover:bg-[#ff8d3d] hover:scale-[1.03] active:scale-95 shadow-[0_8px_30px_rgba(255,122,26,0.4)] focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="inline-flex items-center gap-2 rounded-full bg-[var(--aj-acc)] px-7 py-3 text-sm font-bold text-black transition hover:bg-[var(--aj-acc-hi2)] hover:scale-[1.03] active:scale-95 shadow-[0_8px_30px_var(--aj-acc-shadow)] focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
               <IconPlay size={16} /> Play Free
             </button>
@@ -158,7 +158,7 @@ export function HeroCarousel({
               onClick={() => toggleLater(current)}
               aria-label={later ? 'Remove from Watch Later' : 'Add to Watch Later'}
               className={`flex h-11 w-11 items-center justify-center rounded-full backdrop-blur transition hover:scale-110 active:scale-95 ${
-                later ? 'bg-[#ff7a1a]/25 text-[#ffb37a]' : 'bg-white/10 text-white hover:bg-white/20'
+                later ? 'bg-[var(--aj-acc-25)] text-[var(--aj-acc-hi)]' : 'bg-white/10 text-white hover:bg-white/20'
               }`}
             >
               <IconBookmark size={18} filled={later} />
@@ -191,7 +191,7 @@ export function HeroCarousel({
             onClick={() => goTo(i)}
             aria-label={`Go to slide ${i + 1}`}
             className={`h-1.5 rounded-full transition-all duration-300 ${
-              i === idx ? 'w-8 bg-[#ff7a1a]' : 'w-3 bg-white/30 hover:bg-white/50'
+              i === idx ? 'w-8 bg-[var(--aj-acc)]' : 'w-3 bg-white/30 hover:bg-white/50'
             }`}
           >
             {i === idx && !paused && <span className="block h-full w-full rounded-full" />}
