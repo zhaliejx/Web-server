@@ -108,6 +108,21 @@ export const IconCalendar = (p: IconProps) => (
   </Svg>
 );
 
+// ── Medium switch (anime ⇄ manga) ────────────────────────────────────────────
+export const IconTv = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="7" width="18" height="13" rx="2.5" />
+    <path d="m8 3 4 4 4-4" />
+  </Svg>
+);
+
+export const IconBook = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 6.8C10.2 5.2 7.9 4.6 5 4.6c-.8 0-1.6.05-2.5.2v14.6c.9-.15 1.7-.2 2.5-.2 2.9 0 5.2.6 7 2.2 1.8-1.6 4.1-2.2 7-2.2.8 0 1.6.05 2.5.2V4.8c-.9-.15-1.7-.2-2.5-.2-2.9 0-5.2.6-7 2.2z" />
+    <path d="M12 6.8v14.6" />
+  </Svg>
+);
+
 export const IconClock = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="12" cy="12" r="9" />

@@ -10,7 +10,34 @@ chapter first.
 
 ---
 
-## Chapter 4 — The Great UI Overhaul (current)
+## Chapter 5 — Manga, Manhwa & Manhua Mode (current)
+
+Ajest is no longer anime-only. A new SVG **Anime ⇄ Manga switch** (TV icon /
+open-book icon, top bar on every screen) flips the entire app between its two
+libraries. The choice persists per device.
+
+**Powered by MangaDex** — free public API, English releases, non-adult only:
+
+- **Manga home** — rails for Trending, Popular Manhwa (Korean), Manhua
+  (Chinese), Action, Romance, Fantasy, Fresh Updates and New Releases, plus a
+  local **Continue Reading** rail with per-page progress.
+- **Search** — debounced MangaDex title search with poster grid.
+- **Series page** — cover hero, authors, community rating, follows, tags,
+  status, and the full English chapter list (newest first, read-state ticks,
+  50-at-a-time expansion). Like / Save buttons with their own libraries.
+- **Reader** — full-screen vertical-scroll reader that handles both manhwa
+  longstrips and paged manga: page tracker, keyboard nav (Esc, ←/→),
+  prev/next chapter, end-of-chapter panel, and reading progress saved
+  page-by-page to the device.
+- **My Manga shelf** — Continue Reading + Saved in one view.
+
+Five new API routes (`/api/manga/*`) proxy and cache MangaDex with rate-limit
+discipline; licensed titles that only offer off-site chapters are detected and
+surface an honest "No English chapters yet" state instead of a dead reader.
+
+---
+
+## Chapter 4 — The Great UI Overhaul
 
 The app worked; now it *feels* right. One focused pass on layout, polish and
 the three most annoying bugs:

@@ -90,3 +90,46 @@ export interface HistoryEntry {
   durationSec: number;
   updatedAt: number;
 }
+
+// ── Manga / manhwa (MangaDex tier) ──────────────────────────────────────────
+
+export interface MangaItem {
+  /** MangaDex UUID */
+  id: string;
+  title: string;
+  /** Cover URL (uploads.mangadex.org) */
+  cover: string;
+  description: string;
+  /** ongoing | completed | hiatus | cancelled */
+  status: string;
+  year?: number;
+  contentRating: string;
+  tags: string[];
+  /** Country of origin — jp = manga, kr = manhwa, cn = manhua */
+  origin: 'jp' | 'kr' | 'cn' | 'other';
+  lastChapter?: string;
+  /** Bayesian 0-10 rating (MangaDex statistics) */
+  rating?: number;
+  follows?: number;
+  authors?: string[];
+}
+
+export interface MangaChapter {
+  id: string;
+  number: string;
+  title?: string;
+  pages: number;
+  /** unix ms — publish time */
+  at: number;
+  group?: string;
+}
+
+export interface MangaHistoryEntry {
+  manga: MangaItem;
+  chapter: { id: string; number: string; title?: string };
+  /** Page index (0-based) the reader is on */
+  page: number;
+  /** Total pages in that chapter */
+  pages: number;
+  updatedAt: number;
+}
