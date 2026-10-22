@@ -1,14 +1,14 @@
 'use client';
 
 // ── Source provider registry + user preferences (localStorage-backed) ───────
-// The streams resolver supports multiple independent providers. Users can
-// toggle any of them off (e.g. they dislike embed players), and the Player
-// forwards the enabled set to /api/streams so disabled tiers are never even
-// contacted — which also makes resolution faster.
+// The streams resolver follows the chain: ani.pm → gogo → AnimeKaizen →
+// YouTube. Users can toggle any of them off, and the Player forwards the
+// enabled set to /api/streams so disabled tiers are never even contacted —
+// which also makes resolution faster.
 
 import { useCallback, useEffect, useState } from 'react';
 
-export const PROVIDER_ORDER = ['gogo', 'youtube', 'anipm', 'vidlink', 'kaizen'] as const;
+export const PROVIDER_ORDER = ['anipm', 'gogo', 'kaizen', 'youtube'] as const;
 export type ProviderId = (typeof PROVIDER_ORDER)[number];
 
 export interface ProviderMeta {
@@ -21,6 +21,13 @@ export interface ProviderMeta {
 }
 
 export const PROVIDERS: Record<ProviderId, ProviderMeta> = {
+  anipm: {
+    id: 'anipm',
+    label: 'HD player',
+    blurb: 'First in the chain — verified full episodes, sub & dub, checked in your browser before it plays. Widest HD coverage.',
+    kind: 'embed',
+    badge: 'First',
+  },
   gogo: {
     id: 'gogo',
     label: 'Direct streams',
@@ -28,33 +35,19 @@ export const PROVIDERS: Record<ProviderId, ProviderMeta> = {
     kind: 'native',
     badge: 'Best experience',
   },
+  kaizen: {
+    id: 'kaizen',
+    label: 'AnimeKaizen',
+    blurb: 'Google-hosted mirror for the latest episode of select shows. Zero-cost extra fallback.',
+    kind: 'embed',
+    badge: 'Mirror',
+  },
   youtube: {
     id: 'youtube',
     label: 'Official channel uploads',
     blurb: 'Full episodes from official anime channels (Muse Asia, Crunchyroll…). Region-dependent.',
     kind: 'native',
     badge: 'Legit',
-  },
-  anipm: {
-    id: 'anipm',
-    label: 'HD player',
-    blurb: 'Verified full episodes — sub & dub — checked in your browser before it plays. Widest HD coverage.',
-    kind: 'embed',
-    badge: 'Recommended',
-  },
-  vidlink: {
-    id: 'vidlink',
-    label: 'Universal player',
-    blurb: 'Multi-server backup that covers effectively every anime through TMDB. Heavier on ads.',
-    kind: 'embed',
-    badge: 'Backup',
-  },
-  kaizen: {
-    id: 'kaizen',
-    label: 'Kaizen mirror',
-    blurb: 'Google-hosted mirror for the latest episode of select shows. Zero-cost extra fallback.',
-    kind: 'embed',
-    badge: 'Mirror',
   },
 };
 
@@ -131,12 +124,13 @@ export function useSourcePrefs(): {
 }
 
 // ── Manga source registry + preferences ─────────────────────────────────────
-// Manga works differently from streams: all enabled tiers are merged into one
-// search result list, and if MangaDex has no readable chapters for a series
-// the gateway falls back to the scrape tiers automatically. Toggling a source
-// removes it from search and from the fallback chain.
+// Chain: MangaFire → MangaPill → MangaRead → MangaDex. MangaFire is embed-only
+// (its reader opens in an iframe on the series page), MangaPill/MangaRead are
+// server-scraped mirrors that merge into search and fill missing chapter
+// lists, and MangaDex is the rich catalog underneath it all. Toggling a source
+// removes it from search, from the chapter fallback chain and from the UI.
 
-export const MANGA_SOURCE_ORDER = ['mangadex', 'mangaread', 'mangapill'] as const;
+export const MANGA_SOURCE_ORDER = ['mangafire', 'mangapill', 'mangaread', 'mangadex'] as const;
 export type MangaSourceId = (typeof MANGA_SOURCE_ORDER)[number];
 
 export interface MangaSourceMeta {
@@ -147,11 +141,17 @@ export interface MangaSourceMeta {
 }
 
 export const MANGA_SOURCES: Record<MangaSourceId, MangaSourceMeta> = {
-  mangadex: {
-    id: 'mangadex',
-    label: 'MangaDex',
-    blurb: 'Community catalog with ratings, follows and the home rails. Some licensed titles have no readable chapters here.',
-    badge: 'Default',
+  mangafire: {
+    id: 'mangafire',
+    label: 'MangaFire',
+    blurb: 'First in the chain — biggest library of all, embedded reader (iframe) on every series page. Carries licensed titles like Solo Leveling in full.',
+    badge: 'Iframe',
+  },
+  mangapill: {
+    id: 'mangapill',
+    label: 'MangaPill',
+    blurb: 'Fast lightweight mirror, second in the chain. Images relay through Ajest; good coverage for older series.',
+    badge: 'Mirror',
   },
   mangaread: {
     id: 'mangaread',
@@ -159,11 +159,11 @@ export const MANGA_SOURCES: Record<MangaSourceId, MangaSourceMeta> = {
     blurb: 'Biggest official-title mirror — fills in licensed series (Solo Leveling, My Dress-Up Darling…) with full chapter lists.',
     badge: 'Most complete',
   },
-  mangapill: {
-    id: 'mangapill',
-    label: 'MangaPill',
-    blurb: 'Fast lightweight mirror. Images relay through Ajest; good extra coverage for older series.',
-    badge: 'Mirror',
+  mangadex: {
+    id: 'mangadex',
+    label: 'MangaDex',
+    blurb: 'Last in the chain — community catalog with ratings, follows and the home rails. Some licensed titles have no readable chapters here.',
+    badge: 'Catalog',
   },
 };
 

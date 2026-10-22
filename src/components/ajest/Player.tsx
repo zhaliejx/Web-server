@@ -44,7 +44,6 @@ function proxied(url: string): string {
 // Embedded sources are identity-masked in the UI — never reveal the upstream brand
 function providerLabel(p: string): string {
   if (p.startsWith('youtube')) return 'Official source';
-  if (p === 'vidlink') return 'Universal player';
   if (p === 'anipm') return 'HD player';
   if (p === 'kaizen') return 'Kaizen mirror';
   return p;
@@ -241,24 +240,6 @@ export default function Player({
     resumeAtRef.current = resumeAt ?? 0;
   }, [resumeAt]);
 
-  // VidLink (external universal embed) posts playback events to the parent
-  // window — completion auto-advances to the next episode.
-  useEffect(() => {
-    if (!extEmbed) return;
-    const onMsg = (ev: MessageEvent) => {
-      if (!ev.origin.includes('vidlink')) return;
-      try {
-        const d = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
-        const t = String((d && (d.type || d.event)) || '').toUpperCase();
-        if (t.includes('COMPLETE') || t.includes('ENDED')) onNextEpisode();
-      } catch {
-        /* non-JSON frame message */
-      }
-    };
-    window.addEventListener('message', onMsg);
-    return () => window.removeEventListener('message', onMsg);
-  }, [extEmbed, onNextEpisode]);
-
   // ── Source attachment with automatic provider fallback ────────────────────
   // Self-recursion (fatal error → next provider) goes through a ref declared
   // before the implementation so the binding is always initialized.
@@ -304,10 +285,9 @@ export default function Player({
     }
     ytFailRef.current = null;
 
-    // ── External universal embed (VidLink) — provider-rendered playback ──────
+    // ── External embed (ani.pm / AnimeKaizen) — provider-rendered playback ──
     // Cross-origin player: Ajest cannot drive it, so its own controls handle
-    // playback; Ajest keeps the top bar + a provider-switch chip and listens
-    // for completion events to auto-advance.
+    // playback; Ajest keeps the top bar + a provider-switch chip.
     if (src.url.startsWith('embed:')) {
       const embedUrl = src.url.slice('embed:'.length);
       setYtEmbed(null);
@@ -820,7 +800,7 @@ export default function Player({
         </>
       )}
 
-      {/* ── External universal embed (VidLink) — own controls, Ajest chrome ── */}
+      {/* ── External embed (ani.pm / AnimeKaizen) — own controls, Ajest chrome ── */}
       {extEmbed && (
         <>
           <iframe

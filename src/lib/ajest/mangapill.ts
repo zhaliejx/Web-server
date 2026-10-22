@@ -220,7 +220,7 @@ export async function pillChapters(id: string): Promise<MangaChapter[]> {
       const numMatch = slug.match(/-chapter-([0-9][0-9.-]*)$/);
       if (!numMatch) continue; // volume extras / one-shots without numbers
       const number = numMatch[1].replace(/-(?=\d)/g, '.').replace(/\.$/, '');
-      out.push({ id: `mpc:${mc}/${slug}`, number, pages: 0, at: 0 });
+      out.push({ id: `mpc:${mc}/${slug}`, number, pages: 0, at: 0, source: 'mangapill' });
     }
     // The page may surface "read first/latest" buttons before the list —
     // enforce newest-first by chapter number regardless of DOM order.

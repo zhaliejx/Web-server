@@ -16,18 +16,17 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 // ── Stream resolution (parallel tiers) ───────────────────────────────────────
-//   1. gogoanime.by direct scrape (slug guess → site search → relay search)
-//   2. official YouTube resolution (channel-whitelisted uploads)
-//   3. ani.pm verified-address embed (AniList id)
-//   4. VidLink universal embed (TMDB id via ani.zip)
-//   5. AnimeKaizen latest-episode mirror (Blogger embed)
+//   1. ani.pm verified-address embed (AniList id) — first in the chain
+//   2. gogoanime.by direct scrape (slug guess → site search → relay search)
+//   3. AnimeKaizen latest-episode mirror (Blogger embed)
+//   4. official YouTube resolution (channel-whitelisted uploads)
 //
 // All independent lookups run CONCURRENTLY with per-tier time budgets —
 // response time ≈ slowest enabled tier instead of the serial sum. The
 // `providers` param (client source toggles) skips tiers entirely, which
 // shortens both the work and the wall clock.
 
-const ALL_PROVIDERS = ['gogo', 'youtube', 'anipm', 'vidlink', 'kaizen'] as const;
+const ALL_PROVIDERS = ['anipm', 'gogo', 'kaizen', 'youtube'] as const;
 type Tier = (typeof ALL_PROVIDERS)[number];
 
 /** Overall wall-clock cap before the response ships with whatever settled. */
@@ -129,10 +128,10 @@ export async function GET(req: Request) {
 
   // ── Fast-exit ─────────────────────────────────────────────────────────
   // All tiers race in parallel, but the response doesn't have to wait for
-  // every straggler: ani.pm + VidLink embeds are ready almost instantly, so
-  // after FAST_EXIT_MS we collect whatever finished and give stragglers a
-  // short grace window. A 13s gogo scrape can no longer hold the response
-  // hostage — the player auto-falls to the embed tiers instead.
+  // every straggler: ani.pm embeds are ready almost instantly, so after
+  // FAST_EXIT_MS we collect whatever finished and give stragglers a short
+  // grace window. A 13s gogo scrape can no longer hold the response
+  // hostage — the player auto-falls to the embed tier instead.
   const allTiers = Promise.all([zipP, gogoP, ytP, kzP, malP] as const);
   let fastExit = false;
   await Promise.race([
@@ -151,30 +150,11 @@ export async function GET(req: Request) {
   // ── Compose the ordered fallback chain ────────────────────────────────────
   const sources: VideoSource[] = [];
 
-  // 1. gogo direct files (native Ajest controls when they play)
-  if (resolved?.sources?.length) {
-    for (const s of resolved.sources) {
-      sources.push({ ...s, url: proxied(s.url) });
-    }
-  }
-
-  // 2. official YouTube full episode
-  if (ytHit) {
-    sources.push({
-      provider: ytHit.official ? 'youtube-official' : 'youtube-full',
-      url: `youtube:${ytHit.video.videoId}`,
-      quality: 'full',
-      isM3U8: false,
-      note: ytHit.official
-        ? `Official full episode · ${ytHit.video.channel}`
-        : `Full episode · ${ytHit.video.channel}`,
-    });
-  }
-
-  // 3. ani.pm verified-address embed — partner player with `frame-ancestors *`;
-  //    episode numbering matches AniList. Its Cloudflare blocks Node TLS
-  //    fingerprints, so the server ships the URL blind and the Player
-  //    verifies availability from the browser via the CORS-open partner API.
+  // 1. ani.pm verified-address embed — chain-first. Partner player with
+  //    `frame-ancestors *`; episode numbering matches AniList. Its Cloudflare
+  //    blocks Node TLS fingerprints, so the server ships the URL blind and the
+  //    Player verifies availability from the browser via the CORS-open partner
+  //    API (auto-switches to the next tier on a confirmed miss).
   if (bridgedAnilist && enabled.has('anipm')) {
     sources.push({
       provider: 'anipm',
@@ -185,20 +165,14 @@ export async function GET(req: Request) {
     });
   }
 
-  // 4. VidLink universal embed (TMDB-addressed) — catalog-wide coverage
-  const zep = zip?.episodes.find((e) => e.number === episode);
-  if (zip?.tmdbId && enabled.has('vidlink')) {
-    const season = zep?.seasonNumber ?? 1;
-    sources.push({
-      provider: 'vidlink',
-      url: `embed:https://vidlink.pro/tv/${zip.tmdbId}/${season}/${episode}`,
-      quality: 'auto',
-      isM3U8: false,
-      note: 'Universal multi-server player',
-    });
+  // 2. gogo direct files (native Ajest controls when they play)
+  if (resolved?.sources?.length) {
+    for (const s of resolved.sources) {
+      sources.push({ ...s, url: proxied(s.url) });
+    }
   }
 
-  // 5. AnimeKaizen latest-episode mirror (Blogger-hosted, episode-matched)
+  // 3. AnimeKaizen latest-episode mirror (Blogger-hosted, episode-matched)
   if (kz) {
     const epOk = kz.episode === null || kz.episode === episode;
     if (epOk) {
@@ -210,6 +184,19 @@ export async function GET(req: Request) {
         note: kz.epTitle ? `Latest-episode mirror · ${kz.epTitle.slice(0, 80)}` : 'Latest-episode mirror',
       });
     }
+  }
+
+  // 4. official YouTube full episode
+  if (ytHit) {
+    sources.push({
+      provider: ytHit.official ? 'youtube-official' : 'youtube-full',
+      url: `youtube:${ytHit.video.videoId}`,
+      quality: 'full',
+      isM3U8: false,
+      note: ytHit.official
+        ? `Official full episode · ${ytHit.video.channel}`
+        : `Full episode · ${ytHit.video.channel}`,
+    });
   }
 
   // Trailer as clearly-labeled last resort (official channels only)

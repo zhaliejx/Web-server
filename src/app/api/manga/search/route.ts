@@ -24,9 +24,12 @@ export async function GET(req: Request) {
     .filter(Boolean);
   const want = (s: string) => srcParam.length === 0 || srcParam.includes(s);
 
-  // All tiers race in parallel. Priority on collision: MangaDex → MangaRead
-  // → MangaPill, deduped by normalized title so series don't double up.
+  // All tiers race in parallel. Priority on collision follows the chain:
+  // MangaPill → MangaRead → MangaDex (MangaFire is embed-only, no search
+  // tier), deduped by normalized title so series don't double up.
   const jobs: [string, Promise<MangaItem[]>][] = [];
+  if (want('mangapill')) jobs.push(['mangapill', pillSearch(q, 16)]);
+  if (want('mangaread')) jobs.push(['mangaread', mrSearch(q, 16)]);
   if (want('mangadex')) {
     jobs.push([
       'mangadex',
@@ -35,8 +38,6 @@ export async function GET(req: Request) {
       ),
     ]);
   }
-  if (want('mangaread')) jobs.push(['mangaread', mrSearch(q, 16)]);
-  if (want('mangapill')) jobs.push(['mangapill', pillSearch(q, 16)]);
 
   const settled = await Promise.allSettled(jobs.map(([, p]) => p));
 
@@ -56,7 +57,7 @@ export async function GET(req: Request) {
     );
   }
 
-  const order = ['mangadex', 'mangaread', 'mangapill'];
+  const order = ['mangapill', 'mangaread', 'mangadex'];
   const seen = new Set<string>();
   const merged: MangaItem[] = [];
   for (const tier of order) {

@@ -8,8 +8,9 @@ export async function GET(req: Request) {
   const id = (new URL(req.url).searchParams.get('id') || '').trim();
   if (!id) return NextResponse.json({ ok: false, error: 'missing id' }, { status: 400 });
   try {
-    // Resolves across tiers: MangaDex feed → WeebCentral → MangaPill when a
+    // Resolves across the chain: MangaDex feed → MangaPill → MangaRead when a
     // series has no readable EN chapters on MD (licensed/external-only).
+    // MangaFire sits first in the chain but is embed-only (iframe reader).
     const chapters = await mangaChaptersResolved(id);
     return NextResponse.json({ ok: true, chapters });
   } catch (e) {

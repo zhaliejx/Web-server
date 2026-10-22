@@ -17,9 +17,9 @@ const CREDITS: { name: string; role: string }[] = [
   { name: 'ani.zip', role: 'Episode metadata & ID mappings' },
   { name: 'ani.pm', role: 'HD embed playback (sub & dub)' },
   { name: 'Gogoanime', role: 'Direct stream sources' },
-  { name: 'VidLink', role: 'Universal fallback player' },
   { name: 'AnimeKaizen', role: 'Latest-episode mirror' },
   { name: 'YouTube', role: 'Official channel uploads' },
+  { name: 'MangaFire', role: 'Embedded manga reader (iframe)' },
   { name: 'MangaDex', role: 'Manga catalog & reader' },
   { name: 'MangaRead', role: 'Manga mirror & chapter fallback' },
   { name: 'MangaPill', role: 'Manga mirror & chapter fallback' },
@@ -116,8 +116,9 @@ export function SourceSettings({ open, onClose }: { open: boolean; onClose: () =
             Streaming sources
           </h3>
           <p className="px-3 pb-2 text-[11.5px] leading-snug text-white/45">
-            Ajest tries these in order until one plays. Turn off what you don&apos;t want —
-            disabled sources are skipped instantly.
+            Ajest follows the chain ani.pm → gogo → AnimeKaizen → YouTube.
+            Turn off what you don&apos;t want — disabled sources are skipped
+            instantly.
           </p>
           <ul className="flex flex-col divide-y divide-white/[0.05]">
             {PROVIDER_ORDER.map((id) => {
@@ -189,9 +190,10 @@ export function SourceSettings({ open, onClose }: { open: boolean; onClose: () =
             Manga sources
           </h3>
           <p className="px-3 pb-2 text-[11.5px] leading-snug text-white/45">
-            Search merges every enabled source. When MangaDex has no readable
-            chapters (licensed titles), Ajest falls back to the mirrors
-            automatically — unless you turn them off here.
+            Chain: MangaFire (embedded reader) → MangaPill → MangaRead →
+            MangaDex. Search merges every enabled source, and when MangaDex has
+            no readable chapters (licensed titles) Ajest fills the list from
+            the mirrors automatically — unless you turn them off here.
           </p>
           <ul className="flex flex-col divide-y divide-white/[0.05]">
             {MANGA_SOURCE_ORDER.map((id) => {

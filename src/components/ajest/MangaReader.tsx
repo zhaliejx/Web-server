@@ -11,6 +11,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MangaChapter, MangaItem } from '@/lib/ajest/types';
 import { fetchMangaChapters, fetchMangaPages } from '@/lib/ajest/manga';
 import { useMangaHistory } from '@/lib/ajest/mangastore';
+import { useMangaSourcePrefs } from '@/lib/ajest/prefs';
+import { MangaFireEmbed } from './MangaFireEmbed';
 import { IconChevronLeft, IconChevronRight, IconClose, IconLoader, IconAlert, IconBook } from './icons';
 
 interface Props {
@@ -33,6 +35,7 @@ export function MangaReader({ manga, chapter, resumePage = 0, onClose, onNav }: 
   const resumedRef = useRef(resumePage <= 0);
 
   const upsertHistory = useMangaHistory((s) => s.upsert);
+  const mfEnabled = useMangaSourcePrefs().disabled.includes('mangafire') === false;
 
   // Chapter feed (for prev/next) — server-cached, one cheap request
   useEffect(() => {
@@ -151,6 +154,7 @@ export function MangaReader({ manga, chapter, resumePage = 0, onClose, onNav }: 
             {current + 1} / {pages.length}
           </span>
         )}
+        {mfEnabled && <MangaFireEmbed title={manga.title} compact />}
         <button
           onClick={() => prevChapter && onNav(prevChapter)}
           disabled={!prevChapter}

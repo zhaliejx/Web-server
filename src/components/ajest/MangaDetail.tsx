@@ -7,6 +7,8 @@ import type { MangaChapter, MangaItem } from '@/lib/ajest/types';
 import { fetchMangaChapters, fetchMangaDetail, mangaOriginLabel, mangaStatusLabel, fmtFollows, fmtChapterDate } from '@/lib/ajest/manga';
 import { cleanDescription } from '@/lib/ajest/client';
 import { useMangaHistory, useMangaSaved, useMangaLiked } from '@/lib/ajest/mangastore';
+import { useMangaSourcePrefs } from '@/lib/ajest/prefs';
+import { MangaFireEmbed } from './MangaFireEmbed';
 import { IconChevronLeft, IconHeart, IconBookmark, IconPlay, IconBook, IconLoader, IconStar, IconCheck } from './icons';
 
 interface Props {
@@ -44,6 +46,7 @@ export function MangaDetail({ manga, onBack, onRead }: Props) {
   const toggleSaved = useMangaSaved((s) => s.toggle);
   const liked = useMangaLiked((s) => s.items.some((x) => x.id === manga.id));
   const toggleLiked = useMangaLiked((s) => s.toggle);
+  const mfEnabled = useMangaSourcePrefs().disabled.includes('mangafire') === false;
 
   // Enrich with authors/rating/fresh cover from the detail endpoint
   useEffect(() => {
@@ -219,6 +222,7 @@ export function MangaDetail({ manga, onBack, onRead }: Props) {
               >
                 <IconBookmark size={15} filled={saved} /> {saved ? 'Saved' : 'Save'}
               </button>
+              {mfEnabled && <MangaFireEmbed title={full.title} />}
             </div>
           </div>
         </div>
@@ -249,6 +253,15 @@ export function MangaDetail({ manga, onBack, onRead }: Props) {
             <IconBook size={26} className="mx-auto mb-2 text-white/30" />
             <p className="text-sm font-semibold">No English chapters yet</p>
             <p className="mt-1 text-xs text-white/35">Check back later — Ajest lists every series with English releases.</p>
+            {mfEnabled && (
+              <div className="mt-5 flex flex-col items-center gap-2">
+                <p className="text-xs text-white/45">This series may still be fully readable on MangaFire:</p>
+                <MangaFireEmbed
+                  title={full.title}
+                  className="inline-flex items-center gap-2 rounded-full bg-[var(--aj-acc)] px-6 py-2.5 text-[13px] font-bold text-black transition hover:bg-[var(--aj-acc-hi2)] hover:scale-[1.03]"
+                />
+              </div>
+            )}
           </div>
         ) : (
           <ul className="flex flex-col gap-1.5">
