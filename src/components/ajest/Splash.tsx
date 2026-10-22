@@ -22,6 +22,7 @@ export default function Splash({ onDone }: { onDone: (healthy: boolean) => void 
     gogo: null,
     relay: null,
   });
+  const [overall, setOverall] = useState<boolean | null>(null);
   const healthyRef = useRef(false);
   const doneRef = useRef(false);
 
@@ -46,6 +47,7 @@ export default function Splash({ onDone }: { onDone: (healthy: boolean) => void 
         const h = await fetchHealth();
         if (cancelled) return;
         healthyRef.current = h.ok;
+        setOverall(h.ok);
         setServices({
           anilist: h.services.anilist,
           kitsu: h.services.kitsu,
@@ -56,6 +58,7 @@ export default function Splash({ onDone }: { onDone: (healthy: boolean) => void 
       } catch {
         if (!cancelled) {
           healthyRef.current = false;
+          setOverall(false);
           setServices({ anilist: false, kitsu: false, anizip: false, gogo: false, relay: false });
         }
       }
@@ -100,9 +103,12 @@ export default function Splash({ onDone }: { onDone: (healthy: boolean) => void 
     };
   }, [phase, onDone]);
 
+  // AniList has recurring global outages — when it's down but mirrors are
+  // serving, show it as degraded (amber) instead of a hard failure (red X).
+  const degraded = overall === true && services.anilist === false;
   const rows: { key: string; label: string }[] = [
-    { key: 'anilist', label: 'AniList · primary catalog' },
-    { key: 'kitsu', label: 'Kitsu · fallback catalog' },
+    { key: 'anilist', label: degraded ? 'AniList · outage — Kitsu mirrors serving' : 'AniList · primary catalog' },
+    { key: 'kitsu', label: 'Kitsu · mirror catalog' },
     { key: 'anizip', label: 'ani.zip · episode metadata' },
     { key: 'gogo', label: 'Gogoanime · stream sources' },
     { key: 'relay', label: 'Relay · search assist' },
@@ -146,7 +152,18 @@ export default function Splash({ onDone }: { onDone: (healthy: boolean) => void 
           {rows.map((r) => (
             <li key={r.key}>
               <span className="aj-splash-svc-label">{r.label}</span>
-              <span className={`aj-splash-svc-state ${services[r.key] === false ? 'is-fail' : services[r.key] ? 'is-ok' : 'is-wait'}`}>
+              <span
+                className={`aj-splash-svc-state ${
+                  services[r.key] === false
+                    ? overall
+                      ? 'is-degraded'
+                      : 'is-fail'
+                    : services[r.key]
+                      ? 'is-ok'
+                      : 'is-wait'
+                }`}
+                title={services[r.key] === false && overall ? 'Down — mirrors are serving this tier' : undefined}
+              >
                 {services[r.key] === null ? (
                   <IconLoader size={13} className="aj-spin" />
                 ) : services[r.key] ? (
