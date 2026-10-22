@@ -74,9 +74,10 @@ export function slugCandidates(titles: { main: string; english?: string; romaji?
   return Array.from(out).filter(Boolean);
 }
 
-function similar(a: string, b: string): number {
-  const na = a.replace(/[^a-z0-9]/g, '');
-  const nb = b.replace(/[^a-z0-9]/g, '');
+export function similar(a: string, b: string): number {
+  // case-insensitive — mirrors often use ALL-CAPS titles ("SOLO LEVELING")
+  const na = a.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const nb = b.toLowerCase().replace(/[^a-z0-9]/g, '');
   if (!na || !nb) return 0;
   if (na === nb) return 100;
   if (na.includes(nb) || nb.includes(na)) return 75;

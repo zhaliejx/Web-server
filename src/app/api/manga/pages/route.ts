@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server';
 import { HEADERS } from '@/lib/ajest/mangadex';
 import { isPillChapterId, pillPages } from '@/lib/ajest/mangapill';
+import { isMrChapterId, mrPages } from '@/lib/ajest/mangaread';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 /**
- * Page resolver for both manga tiers:
- * • MangaPill (mpc: chapters) — scrape the chapter page; its CDN paths are
- *   permanent, so pillPages caches generously and returns relayed image urls.
+ * Page resolver for all manga tiers:
+ * • MangaPill (mpc:) / MangaRead (mrc:) — scrape the chapter page; their CDN
+ *   paths are permanent, so both cache generously and return direct urls
+ *   (MangaPill images relay through /api/manga/image; MangaRead hotlinks fine).
  * • MangaDex — at-home server returns fresh, short-lived page image URLs for a
  *   chapter. Never cached: links rotate and are effectively single-session.
  */
@@ -20,6 +22,11 @@ export async function GET(req: Request) {
       const pages = await pillPages(chapter);
       if (!pages.length) throw new Error('No readable pages returned');
       return NextResponse.json({ ok: true, pages, source: 'mangapill' });
+    }
+    if (isMrChapterId(chapter)) {
+      const pages = await mrPages(chapter);
+      if (!pages.length) throw new Error('No readable pages returned');
+      return NextResponse.json({ ok: true, pages, source: 'mangaread' });
     }
 
     const r = await fetch(`https://api.mangadex.org/at-home/server/${encodeURIComponent(chapter)}`, {

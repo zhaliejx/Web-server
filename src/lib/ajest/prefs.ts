@@ -129,3 +129,112 @@ export function useSourcePrefs(): {
   }, []);
   return { disabled, toggle, reset };
 }
+
+// ── Manga source registry + preferences ─────────────────────────────────────
+// Manga works differently from streams: all enabled tiers are merged into one
+// search result list, and if MangaDex has no readable chapters for a series
+// the gateway falls back to the scrape tiers automatically. Toggling a source
+// removes it from search and from the fallback chain.
+
+export const MANGA_SOURCE_ORDER = ['mangadex', 'mangaread', 'mangapill'] as const;
+export type MangaSourceId = (typeof MANGA_SOURCE_ORDER)[number];
+
+export interface MangaSourceMeta {
+  id: MangaSourceId;
+  label: string;
+  blurb: string;
+  badge: string;
+}
+
+export const MANGA_SOURCES: Record<MangaSourceId, MangaSourceMeta> = {
+  mangadex: {
+    id: 'mangadex',
+    label: 'MangaDex',
+    blurb: 'Community catalog with ratings, follows and the home rails. Some licensed titles have no readable chapters here.',
+    badge: 'Default',
+  },
+  mangaread: {
+    id: 'mangaread',
+    label: 'MangaRead',
+    blurb: 'Biggest official-title mirror — fills in licensed series (Solo Leveling, My Dress-Up Darling…) with full chapter lists.',
+    badge: 'Most complete',
+  },
+  mangapill: {
+    id: 'mangapill',
+    label: 'MangaPill',
+    blurb: 'Fast lightweight mirror. Images relay through Ajest; good extra coverage for older series.',
+    badge: 'Mirror',
+  },
+};
+
+const MANGA_LS_KEY = 'ajest-manga-sources-v1';
+
+export interface MangaSourcePrefs {
+  disabled: MangaSourceId[];
+}
+
+export function loadMangaSourcePrefs(): MangaSourcePrefs {
+  if (typeof window === 'undefined') return { disabled: [] };
+  try {
+    const raw = window.localStorage.getItem(MANGA_LS_KEY);
+    if (!raw) return { disabled: [] };
+    const p = JSON.parse(raw) as MangaSourcePrefs;
+    const disabled = Array.isArray(p.disabled)
+      ? p.disabled.filter((d): d is MangaSourceId =>
+          (MANGA_SOURCE_ORDER as readonly string[]).includes(d)
+        )
+      : [];
+    return { disabled: disabled.length >= MANGA_SOURCE_ORDER.length ? [] : disabled };
+  } catch {
+    return { disabled: [] };
+  }
+}
+
+export function saveMangaSourcePrefs(prefs: MangaSourcePrefs) {
+  try {
+    window.localStorage.setItem(MANGA_LS_KEY, JSON.stringify(prefs));
+  } catch {
+    /* storage unavailable — session-only */
+  }
+  window.dispatchEvent(new CustomEvent('ajest-manga-sources-changed'));
+}
+
+export function enabledMangaSources(): MangaSourceId[] {
+  const { disabled } = loadMangaSourcePrefs();
+  return MANGA_SOURCE_ORDER.filter((s) => !disabled.includes(s));
+}
+
+/** React hook — toggles + subscribes to changes across components. */
+export function useMangaSourcePrefs(): {
+  disabled: MangaSourceId[];
+  toggle: (id: MangaSourceId) => void;
+  reset: () => void;
+} {
+  const [disabled, setDisabled] = useState<MangaSourceId[]>(() =>
+    typeof window === 'undefined' ? [] : loadMangaSourcePrefs().disabled
+  );
+  useEffect(() => {
+    const sync = () => setDisabled(loadMangaSourcePrefs().disabled);
+    window.addEventListener('ajest-manga-sources-changed', sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener('ajest-manga-sources-changed', sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+  const toggle = useCallback((id: MangaSourceId) => {
+    const cur = loadMangaSourcePrefs();
+    const next = cur.disabled.includes(id)
+      ? cur.disabled.filter((d) => d !== id)
+      : [...cur.disabled, id];
+    if (next.length < MANGA_SOURCE_ORDER.length) {
+      saveMangaSourcePrefs({ disabled: next });
+      setDisabled(next);
+    }
+  }, []);
+  const reset = useCallback(() => {
+    saveMangaSourcePrefs({ disabled: [] });
+    setDisabled([]);
+  }, []);
+  return { disabled, toggle, reset };
+}

@@ -112,8 +112,8 @@ export interface MangaItem {
   rating?: number;
   follows?: number;
   authors?: string[];
-  /** Upstream the item came from — mangadex API tier or the mangapill scrape */
-  source?: 'mangadex' | 'mangapill';
+  /** Upstream the item came from — mangadex API tier or a scrape tier */
+  source?: 'mangadex' | 'mangapill' | 'mangaread';
 }
 
 export interface MangaChapter {
@@ -124,6 +124,8 @@ export interface MangaChapter {
   /** unix ms — publish time */
   at: number;
   group?: string;
+  /** Tier that served this chapter (fallback chapters differ from the manga's) */
+  source?: 'mangadex' | 'mangapill' | 'mangaread';
 }
 
 export interface MangaHistoryEntry {

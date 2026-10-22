@@ -1,10 +1,11 @@
 'use client';
 
-// ── MangaSearchView — debounced MangaDex title search ────────────────────────
+// ── MangaSearchView — debounced multi-source title search ────────────────────
 
 import { useEffect, useRef, useState } from 'react';
 import type { MangaItem } from '@/lib/ajest/types';
 import { fetchMangaSearch } from '@/lib/ajest/manga';
+import { enabledMangaSources } from '@/lib/ajest/prefs';
 import { MangaCard, MangaCardSkeleton } from './MangaCard';
 import { IconSearch, IconLoader, IconBook } from './icons';
 
@@ -36,7 +37,7 @@ export function MangaSearchView({ onOpen }: Props) {
         return;
       }
       setLoading(true);
-      fetchMangaSearch(q)
+      fetchMangaSearch(q, enabledMangaSources())
         .then((d) => setResults(d.results || []))
         .catch(() => setResults([]))
         .finally(() => {
@@ -52,7 +53,7 @@ export function MangaSearchView({ onOpen }: Props) {
       <div className="px-4 md:px-0">
         <h1 className="text-[22px] font-extrabold text-white md:text-[26px]">Search manga</h1>
         <p className="mt-1 text-[13px] text-white/45">
-          Every manga, manhwa and manhua on MangaDex — English releases only.
+          MangaDex, MangaRead and MangaPill in one list — tune them in Settings → Manga sources.
         </p>
       </div>
 

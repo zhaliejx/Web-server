@@ -168,6 +168,38 @@ export async function mangaFeed(mangaId: string): Promise<MangaChapter[]> {
   return out;
 }
 
+/**
+ * Title candidates for cross-tier matching (chapter fallback): the display
+ * title first, then latin-script alt titles — mirrors like MangaRead index
+ * series under a different official name (e.g. MD "Na Honjaman Level-Up" is
+ * "Solo Leveling" there, matched via the alt title "Only I Level Up").
+ * Also returns the entity's lastChapter — the resolver uses it to reject
+ * fallback matches whose chapter count wildly overshoots this series'.
+ */
+export async function mangaTitleCandidates(
+  id: string
+): Promise<{ candidates: string[]; lastChapter?: string }> {
+  try {
+    const j = await mdJson<{ data: MdManga }>(`/manga/${encodeURIComponent(id)}`);
+    const a = j.data.attributes;
+    const primary =
+      a.title?.en ||
+      Object.values(a.title || {})[0] ||
+      a.altTitles?.find((t) => t.en)?.en ||
+      '';
+    const alts = (a.altTitles || [])
+      .map((t) => Object.values(t)[0] || '')
+      // keep latin-script strings only — kana/hanzi/hangul queries can't match mirrors
+      .filter((t) => /^[\u0000-\u024F\u1E00-\u1EFF'’&.:!-]+(\s|$)/.test(t) || /^[\x20-\x7E]+$/.test(t));
+    return {
+      candidates: Array.from(new Set([primary, ...alts].map((t) => t.trim()).filter(Boolean))).slice(0, 5),
+      lastChapter: a.lastChapter || undefined,
+    };
+  } catch {
+    return { candidates: [] };
+  }
+}
+
 /** Full detail — manga + authors/artists + community statistics */
 export async function mangaDetail(id: string): Promise<MangaItem> {
   const params = mdParams({ 'includes[]': ['cover_art', 'author', 'artist'] });

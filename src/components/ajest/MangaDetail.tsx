@@ -17,6 +17,12 @@ interface Props {
 
 const CHAPTER_PAGE_SIZE = 50;
 
+/** Scrape-tier chips shown beside the origin badge */
+const SOURCE_LABELS: Record<string, string> = {
+  mangapill: 'MangaPill',
+  mangaread: 'MangaRead',
+};
+
 export function MangaDetail({ manga, onBack, onRead }: Props) {
   const [full, setFull] = useState<MangaItem>(manga);
   // Keyed by manga id — while a new series is loading we derive "loading"
@@ -127,16 +133,16 @@ export function MangaDetail({ manga, onBack, onRead }: Props) {
           </div>
 
           <div className="min-w-0 flex-1 text-center md:text-left">
-            {(origin || full.source === 'mangapill') && (
+            {(origin || (full.source && full.source !== 'mangadex')) && (
               <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5 md:justify-start">
                 {origin && (
                   <span className="inline-block rounded-md bg-[var(--aj-acc-15)] px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-[var(--aj-acc-hi)]">
                     {origin}
                   </span>
                 )}
-                {full.source === 'mangapill' && (
+                {full.source && full.source !== 'mangadex' && (
                   <span className="inline-block rounded-md bg-white/[0.07] px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-white/55">
-                    MangaPill
+                    {SOURCE_LABELS[full.source] || full.source}
                   </span>
                 )}
               </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import type { MangaChapter, MangaItem } from './types';
+import { enabledMangaSources } from './prefs';
 
 // ── Manga client fetchers (relative paths through the Next.js gateway) ──────
 
@@ -13,8 +14,13 @@ export async function fetchMangaCatalog(): Promise<{
   return r.json();
 }
 
-export async function fetchMangaSearch(q: string): Promise<{ ok?: boolean; results: MangaItem[] }> {
-  const r = await fetch(`/api/manga/search?q=${encodeURIComponent(q)}`, { cache: 'no-store' });
+/** sources — enabled manga tiers from settings; omitted = server default (all) */
+export async function fetchMangaSearch(
+  q: string,
+  sources?: string[]
+): Promise<{ ok?: boolean; results: MangaItem[] }> {
+  const src = sources?.length ? `&src=${encodeURIComponent(sources.join(','))}` : '';
+  const r = await fetch(`/api/manga/search?q=${encodeURIComponent(q)}${src}`, { cache: 'no-store' });
   return r.json();
 }
 

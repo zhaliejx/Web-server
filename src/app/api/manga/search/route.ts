@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cached } from '@/lib/ajest/upstream';
 import { mangaList } from '@/lib/ajest/mangadex';
 import { pillSearch } from '@/lib/ajest/mangapill';
+import { mrSearch } from '@/lib/ajest/mangaread';
 import type { MangaItem } from '@/lib/ajest/types';
 
 export const dynamic = 'force-dynamic';
@@ -12,37 +13,61 @@ function normTitle(t: string): string {
 }
 
 export async function GET(req: Request) {
-  const q = (new URL(req.url).searchParams.get('q') || '').trim();
+  const url = new URL(req.url);
+  const q = (url.searchParams.get('q') || '').trim();
   if (!q) return NextResponse.json({ ok: true, results: [] });
 
-  // Both tiers race in parallel; MangaDex keeps priority, MangaPill results
-  // follow (deduped by normalized title so the same series doesn't double up).
-  const [md, pill] = await Promise.allSettled([
-    cached(`manga:search:v1:${q.toLowerCase()}`, 3 * 60_000, () =>
-      mangaList({ title: q, 'order[relevance]': 'desc' }, 24)
-    ),
-    pillSearch(q, 18),
-  ]);
+  // Which tiers may run — forwarded by the client from its source settings
+  const srcParam = (url.searchParams.get('src') || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const want = (s: string) => srcParam.length === 0 || srcParam.includes(s);
 
-  const mdResults = md.status === 'fulfilled' ? md.value : [];
-  const pillResults = pill.status === 'fulfilled' ? pill.value : [];
+  // All tiers race in parallel. Priority on collision: MangaDex → MangaRead
+  // → MangaPill, deduped by normalized title so series don't double up.
+  const jobs: [string, Promise<MangaItem[]>][] = [];
+  if (want('mangadex')) {
+    jobs.push([
+      'mangadex',
+      cached(`manga:search:v1:${q.toLowerCase()}`, 3 * 60_000, () =>
+        mangaList({ title: q, 'order[relevance]': 'desc' }, 24)
+      ),
+    ]);
+  }
+  if (want('mangaread')) jobs.push(['mangaread', mrSearch(q, 16)]);
+  if (want('mangapill')) jobs.push(['mangapill', pillSearch(q, 16)]);
 
-  if (!mdResults.length && !pillResults.length) {
-    const reason = md.status === 'rejected' ? md.reason : pill.status === 'rejected' ? pill.reason : null;
+  const settled = await Promise.allSettled(jobs.map(([, p]) => p));
+
+  const byTier: Record<string, MangaItem[]> = {};
+  settled.forEach((r, i) => {
+    const [tier] = jobs[i];
+    byTier[tier] = r.status === 'fulfilled' ? r.value : [];
+  });
+
+  if (Object.values(byTier).every((list) => !list.length)) {
+    const failed = settled.find((r) => r.status === 'rejected');
+    const reason =
+      failed && failed.status === 'rejected' ? failed.reason : null;
     return NextResponse.json(
       { ok: false, results: [], error: reason instanceof Error ? reason.message : 'search failed' },
       { status: 200 }
     );
   }
 
+  const order = ['mangadex', 'mangaread', 'mangapill'];
   const seen = new Set<string>();
   const merged: MangaItem[] = [];
-  for (const m of [...mdResults, ...pillResults]) {
-    const key = normTitle(m.title);
-    if (key && seen.has(key)) continue;
-    seen.add(key);
-    merged.push(m);
-    if (merged.length >= 36) break;
+  for (const tier of order) {
+    for (const m of byTier[tier] || []) {
+      const key = normTitle(m.title);
+      if (key && seen.has(key)) continue;
+      seen.add(key);
+      merged.push(m);
+      if (merged.length >= 40) break;
+    }
+    if (merged.length >= 40) break;
   }
   return NextResponse.json({ ok: true, results: merged });
 }
