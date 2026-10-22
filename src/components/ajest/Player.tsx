@@ -287,7 +287,10 @@ export default function Player({
 
     // ── External embed (ani.pm / AnimeKaizen) — provider-rendered playback ──
     // Cross-origin player: Ajest cannot drive it, so its own controls handle
-    // playback; Ajest keeps the top bar + a provider-switch chip.
+    // playback. ani.pm renders its full UI, so Ajest chrome (top bar +
+    // provider chip) is suppressed there — it collides with the built-in
+    // controls; only the tap-zone guardrail shield and an auto-hiding close
+    // button remain. Kaizen keeps the full Ajest chrome.
     if (src.url.startsWith('embed:')) {
       const embedUrl = src.url.slice('embed:'.length);
       setYtEmbed(null);
@@ -800,7 +803,9 @@ export default function Player({
         </>
       )}
 
-      {/* ── External embed (ani.pm / AnimeKaizen) — own controls, Ajest chrome ── */}
+      {/* ── External embed (ani.pm / AnimeKaizen) — provider-rendered playback.
+              ani.pm: zero Ajest chrome (guardrail shield + auto-hiding close only).
+              Kaizen: full Ajest chrome (wake strips + provider chip). ── */}
       {extEmbed && (
         <>
           <iframe
@@ -817,8 +822,8 @@ export default function Player({
               page to their site. This shield covers everything EXCEPT the
               bottom 96px where their own pause/seek bar lives: the redirect
               layer never receives a click, their controls stay usable, and
-              mousemove over the video wakes the Ajest chrome (cross-origin
-              frames normally swallow it). */}
+              mousemove over the video still wakes the auto-hiding close
+              button (cross-origin frames normally swallow it). */}
           {extEmbed.provider === 'anipm' && (
             <div
               className="absolute inset-x-0 top-0 z-10"
@@ -831,29 +836,38 @@ export default function Player({
           {/* Wake strips — cross-origin iframes swallow mousemove, so these
               thin strips above the iframe re-summon the chrome on hover/tap
               while the middle of the screen stays fully interactive for the
-              upstream player's own controls. ani.pm skips the bottom strip —
-              that zone is its live control-bar passthrough instead. */}
-          <div className="absolute inset-x-0 top-0 z-[5] h-14" onMouseMove={bumpControls} onClick={bumpControls} />
+              upstream player's own controls. ani.pm skips both strips: the
+              guardrail shield already covers the top (and wakes the close
+              button), and the bottom zone is its live control-bar
+              passthrough. */}
           {extEmbed.provider !== 'anipm' && (
-            <div className="absolute inset-x-0 bottom-0 z-[5] h-14" onMouseMove={bumpControls} onClick={bumpControls} />
+            <>
+              <div className="absolute inset-x-0 top-0 z-[5] h-14" onMouseMove={bumpControls} onClick={bumpControls} />
+              <div className="absolute inset-x-0 bottom-0 z-[5] h-14" onMouseMove={bumpControls} onClick={bumpControls} />
+            </>
           )}
-          <div
-            className={`absolute bottom-5 right-4 z-30 flex items-center gap-2.5 rounded-full bg-black/70 px-3.5 py-1.5 text-[11.5px] font-semibold text-white/80 ring-1 ring-white/15 backdrop-blur transition-opacity duration-300 ${
-              showControls || phase !== 'playing' ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
-          >
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#4ade80]" /> {providerLabel(extEmbed.provider)}
-            </span>
-            <button onClick={() => extNextRef.current?.()} className="text-[var(--aj-acc-hi)] transition hover:text-white">
-              switch provider
-            </button>
-            {hasNext && (
-              <button onClick={onNextEpisode} className="text-[var(--aj-acc-hi)] transition hover:text-white">
-                next ep
+          {/* ani.pm: no provider chip — it floats inside the bottom 96px
+              passthrough zone and steals taps from the upstream control bar.
+              Availability auto-switching (extNextRef) still runs headless. */}
+          {extEmbed.provider !== 'anipm' && (
+            <div
+              className={`absolute bottom-5 right-4 z-30 flex items-center gap-2.5 rounded-full bg-black/70 px-3.5 py-1.5 text-[11.5px] font-semibold text-white/80 ring-1 ring-white/15 backdrop-blur transition-opacity duration-300 ${
+                showControls || phase !== 'playing' ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              }`}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#4ade80]" /> {providerLabel(extEmbed.provider)}
+              </span>
+              <button onClick={() => extNextRef.current?.()} className="text-[var(--aj-acc-hi)] transition hover:text-white">
+                switch provider
               </button>
-            )}
-          </div>
+              {hasNext && (
+                <button onClick={onNextEpisode} className="text-[var(--aj-acc-hi)] transition hover:text-white">
+                  next ep
+                </button>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -969,30 +983,47 @@ export default function Player({
         </div>
       )}
 
-      {/* ── Top bar ── */}
-      <div className={`absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/85 to-transparent p-4 transition-opacity duration-300 md:p-5 ${showControls || phase !== 'playing' ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-white md:text-base">{anime.title}</p>
-            <p className="mt-0.5 text-xs text-white/60">
-              Episode {episode}
-              {episodeTitle ? ` · ${episodeTitle}` : ''}
-              {activeProvider && !activeProvider.startsWith('youtube') && (
-                <span className="ml-2 inline-flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-                  <span className="h-1 w-1 rounded-full bg-[#4ade80]" /> {providerLabel(activeProvider)}
-                </span>
-              )}
-            </p>
+      {/* ── Top bar ──
+          ani.pm (HD player): suppressed entirely — the gradient, title and
+          provider pill overlay the upstream player's built-in controls. A
+          lone auto-hiding close button stays as the escape hatch (mobile has
+          no Escape key). */}
+      {extEmbed?.provider !== 'anipm' && (
+        <div className={`absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/85 to-transparent p-4 transition-opacity duration-300 md:p-5 ${showControls || phase !== 'playing' ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-white md:text-base">{anime.title}</p>
+              <p className="mt-0.5 text-xs text-white/60">
+                Episode {episode}
+                {episodeTitle ? ` · ${episodeTitle}` : ''}
+                {activeProvider && !activeProvider.startsWith('youtube') && (
+                  <span className="ml-2 inline-flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                    <span className="h-1 w-1 rounded-full bg-[#4ade80]" /> {providerLabel(activeProvider)}
+                  </span>
+                )}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/50 text-white/85 transition hover:bg-black/80 hover:text-white"
+              aria-label="Close player"
+            >
+              <IconClose size={18} />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/50 text-white/85 transition hover:bg-black/80 hover:text-white"
-            aria-label="Close player"
-          >
-            <IconClose size={18} />
-          </button>
         </div>
-      </div>
+      )}
+      {extEmbed?.provider === 'anipm' && (
+        <button
+          onClick={onClose}
+          className={`absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white/85 backdrop-blur transition-opacity duration-300 hover:bg-black/80 hover:text-white md:right-5 md:top-5 ${
+            showControls || phase !== 'playing' ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
+          aria-label="Close player"
+        >
+          <IconClose size={18} />
+        </button>
+      )}
 
       {/* ── Bottom controls (Ajest-native for ALL sources) ── */}
       <div
