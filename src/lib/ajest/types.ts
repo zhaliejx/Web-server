@@ -52,8 +52,8 @@ export interface DetailPayload {
 }
 
 export interface VideoSource {
-  provider: string; // gogo-by-blogger | youtube-official | youtube-trailer | ...
-  url: string; // proxied http(s) URL or "youtube:<videoId>"
+  provider: string; // gogo-by-blogger | youtube-official | vidlink | ...
+  url: string; // proxied http(s) URL, "youtube:<videoId>", or "embed:<iframe url>"
   quality: string; // auto | 1080p | official | trailer ...
   isM3U8: boolean;
   /** Human-readable origin note (e.g. "Official full episode · Muse Asia") */

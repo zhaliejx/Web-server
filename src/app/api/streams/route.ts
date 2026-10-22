@@ -6,6 +6,7 @@ import {
   rankYoutubeEpisode,
   rankYoutubeTrailer,
 } from '@/lib/ajest/upstream';
+import type { AniZipData } from '@/lib/ajest/upstream';
 import { resolveGogoStreams } from '@/lib/ajest/gogo';
 import type { StreamsPayload, VideoSource } from '@/lib/ajest/types';
 
@@ -39,10 +40,11 @@ export async function GET(req: Request) {
 
   // Look up the canonical episode title (ani.zip per-episode metadata)
   let episodeTitle: string | undefined;
+  let zip: AniZipData | null = null;
   let bridgedAnilist = anilistId ? parseInt(anilistId, 10) : undefined;
   let bridgedMal = malId ? parseInt(malId, 10) : undefined;
   if (bridgedAnilist || bridgedMal) {
-    const zip = await aniZip({ anilistId: bridgedAnilist, malId: bridgedMal });
+    zip = await aniZip({ anilistId: bridgedAnilist, malId: bridgedMal });
     episodeTitle = zip?.episodes.find((e) => e.number === episode)?.title;
     // Bridge missing ids from ani.zip mappings (works even with AniList down)
     if (zip?.mappings) {
@@ -90,6 +92,23 @@ export async function GET(req: Request) {
     } catch {
       /* youtube unreachable → next */
     }
+    // ── VidLink universal embed (TMDB-addressed) — catalog-wide coverage ───
+    // gogoanime.by only hosts a slice of shows; VidLink is a multi-server
+    // aggregator built for iframe embedding that covers effectively every
+    // anime through its TMDB id (ani.zip bridges anilist → themoviedb_id).
+    // It carries its own player UI, so the Player renders it as an embed.
+    if (zip?.tmdbId) {
+      const zep = zip.episodes.find((e) => e.number === episode);
+      const season = zep?.seasonNumber ?? 1;
+      sources.push({
+        provider: 'vidlink',
+        url: `embed:https://vidlink.pro/tv/${zip.tmdbId}/${season}/${episode}`,
+        quality: 'auto',
+        isM3U8: false,
+        note: 'Universal multi-server player',
+      });
+    }
+
     // Trailer as clearly-labeled last resort (official channels only)
     if (!sources.length || sources.every((s) => s.provider.startsWith('gogo-'))) {
       try {

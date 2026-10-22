@@ -43,7 +43,9 @@ function proxied(url: string): string {
 
 // Embedded sources are identity-masked in the UI — never reveal the upstream brand
 function providerLabel(p: string): string {
-  return p.startsWith('youtube') ? 'Official source' : p;
+  if (p.startsWith('youtube')) return 'Official source';
+  if (p === 'vidlink') return 'Universal player';
+  return p;
 }
 
 // ── Official IFrame Player API loader ──────────────────────────────────────
@@ -137,6 +139,8 @@ export default function Player({
   const [seekHover, setSeekHover] = useState<number | null>(null);
   const [officialLinks, setOfficialLinks] = useState<{ site: string; url: string }[]>([]);
   const [ytEmbed, setYtEmbed] = useState<{ id: string; note?: string; provider: string } | null>(null);
+  const [extEmbed, setExtEmbed] = useState<{ url: string; provider: string; note?: string } | null>(null);
+  const extNextRef = useRef<(() => void) | null>(null);
   const [ytHint, setYtHint] = useState(false);
 
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -193,6 +197,24 @@ export default function Player({
     resumeAtRef.current = resumeAt ?? 0;
   }, [resumeAt]);
 
+  // VidLink (external universal embed) posts playback events to the parent
+  // window — completion auto-advances to the next episode.
+  useEffect(() => {
+    if (!extEmbed) return;
+    const onMsg = (ev: MessageEvent) => {
+      if (!ev.origin.includes('vidlink')) return;
+      try {
+        const d = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
+        const t = String((d && (d.type || d.event)) || '').toUpperCase();
+        if (t.includes('COMPLETE') || t.includes('ENDED')) onNextEpisode();
+      } catch {
+        /* non-JSON frame message */
+      }
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [extEmbed, onNextEpisode]);
+
   // ── Source attachment with automatic provider fallback ────────────────────
   // Self-recursion (fatal error → next provider) goes through a ref declared
   // before the implementation so the binding is always initialized.
@@ -217,6 +239,7 @@ export default function Player({
         // Chain exhausted — unmount the embedded player so its audio stops too
         setYtEmbed(null);
         ytActiveRef.current = false;
+        setExtEmbed(null);
         setPhase('error');
       }
     };
@@ -236,6 +259,25 @@ export default function Player({
       ytHintTimerRef.current = null;
     }
     ytFailRef.current = null;
+
+    // ── External universal embed (VidLink) — provider-rendered playback ──────
+    // Cross-origin player: Ajest cannot drive it, so its own controls handle
+    // playback; Ajest keeps the top bar + a provider-switch chip and listens
+    // for completion events to auto-advance.
+    if (src.url.startsWith('embed:')) {
+      setYtEmbed(null);
+      ytActiveRef.current = false;
+      setExtEmbed({ url: src.url.slice('embed:'.length), provider: src.provider, note: src.note });
+      extNextRef.current = () => nextSource(`${providerLabel(src.provider)} unavailable — switching provider…`);
+      setCurrent(0);
+      setDuration(0);
+      setBuffered(0);
+      setPlaying(true);
+      setPhase('playing');
+      onProgress(0, 0);
+      return;
+    }
+    setExtEmbed(null);
 
     // ── Embedded official source — identity fully masked, Ajest-native controls ──
     if (src.url.startsWith('youtube:')) {
@@ -671,7 +713,7 @@ export default function Player({
     >
       <video
         ref={videoRef}
-        className={`absolute inset-0 h-full w-full bg-black object-contain ${ytEmbed ? 'hidden' : ''}`}
+        className={`absolute inset-0 h-full w-full bg-black object-contain ${ytEmbed || extEmbed ? 'hidden' : ''}`}
         playsInline
         autoPlay
         onClick={togglePlay}
@@ -713,6 +755,33 @@ export default function Player({
           </div>
           {/* Tap shield — every tap hits Ajest; the upstream player's own UI can never appear */}
           <div className="absolute inset-0 z-10 cursor-pointer" onClick={togglePlay} />
+        </>
+      )}
+
+      {/* ── External universal embed (VidLink) — own controls, Ajest chrome ── */}
+      {extEmbed && (
+        <>
+          <iframe
+            src={extEmbed.url}
+            className="absolute inset-0 z-0 h-full w-full border-0 bg-black"
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+            allowFullScreen
+            referrerPolicy="origin"
+            title={`Ajest — ${providerLabel(extEmbed.provider)}`}
+          />
+          <div className="absolute bottom-5 right-4 z-30 flex items-center gap-2.5 rounded-full bg-black/70 px-3.5 py-1.5 text-[11.5px] font-semibold text-white/80 ring-1 ring-white/15 backdrop-blur">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#4ade80]" /> {providerLabel(extEmbed.provider)}
+            </span>
+            <button onClick={() => extNextRef.current?.()} className="text-[#ffb37a] transition hover:text-white">
+              switch provider
+            </button>
+            {hasNext && (
+              <button onClick={onNextEpisode} className="text-[#ffb37a] transition hover:text-white">
+                next ep
+              </button>
+            )}
+          </div>
         </>
       )}
 
@@ -856,7 +925,11 @@ export default function Player({
       {/* ── Bottom controls (Ajest-native for ALL sources) ── */}
       <div
         className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-4 pb-3 pt-10 md:px-6 transition-opacity duration-300 ${
-          showControls || phase !== 'playing' ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          extEmbed
+            ? 'hidden'
+            : showControls || phase !== 'playing'
+              ? 'opacity-100'
+              : 'opacity-0 pointer-events-none'
         }`}
       >
         {/* Seek bar */}

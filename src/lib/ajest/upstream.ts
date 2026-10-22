@@ -314,16 +314,21 @@ export interface AniZipEpisode {
   runtimeMin?: number;
   thumbnail?: string;
   airDateUtc?: string;
+  /** TVDB/TMDB season this episode belongs to (universal embed mapping) */
+  seasonNumber?: number;
 }
 
 export interface AniZipData {
   mappings: Record<string, string | number | null>;
   episodeCount?: number;
   episodes: AniZipEpisode[];
+  /** TMDB id (mappings.themoviedb_id) — addresses the universal embed player */
+  tmdbId?: number;
 }
 
 interface AniZipRawEpisode {
   episodeNumber?: number;
+  seasonNumber?: number;
   title?: Record<string, string>;
   runtime?: number;
   image?: string;
@@ -360,10 +365,17 @@ export async function aniZip(query: {
         runtimeMin: e.runtime ?? undefined,
         thumbnail: e.image || undefined,
         airDateUtc: e.airDateUtc || undefined,
+        seasonNumber: e.seasonNumber ?? undefined,
       }))
       .filter((e) => e.number > 0)
       .sort((a, b) => a.number - b.number);
-    return { mappings: d.mappings || {}, episodeCount: d.episodeCount, episodes: eps };
+    const rawTmdb = d.mappings?.themoviedb_id;
+    return {
+      mappings: d.mappings || {},
+      episodeCount: d.episodeCount,
+      episodes: eps,
+      tmdbId: rawTmdb ? parseInt(String(rawTmdb), 10) || undefined : undefined,
+    };
   } catch {
     return null;
   }

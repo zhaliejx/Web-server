@@ -316,16 +316,22 @@ type ExtractResult =
   | { status: 'no-sources' };
 
 /** Shared slug→sources extractor used by every strategy.
- *  Handles the category-widget trap: gogoanime.by category pages list only
- *  RECENT episodes (e.g. dandadan lists 3–12), so any earlier episode must be
- *  probed at its canonical URL (-episode-N-english-subbed/-dubbed) directly. */
+ *  Handles two gogoanime.by quirks:
+ *  1. Widget trap — category pages list only RECENT episodes (dandadan lists
+ *     3–12), so earlier episodes must be probed at their canonical permalink.
+ *  2. Soft-404 categories — unknown /category/ URLs 301 to the homepage, yet
+ *     the episode pages themselves still exist (e.g. one-piece). So a missing
+ *     category must NOT abort resolution: probe the permalink directly. */
 async function extractEpisodeSources(slug: string, ep: number): Promise<ExtractResult> {
   const series = await gogoCategory(slug, ep);
-  if (!series) return { status: 'no-category' };
-  let path = series.episodes.get(ep) || series.dubEpisodes.get(ep);
+  const prefix = slug.replace(/-\d+$/, '');
+  let path = series ? series.episodes.get(ep) || series.dubEpisodes.get(ep) : undefined;
   if (!path) {
-    const prefix = slug.replace(/-\d+$/, '');
-    const probes = [`${prefix}-episode-${ep}-english-subbed`, `${prefix}-episode-${ep}-english-dubbed`];
+    const probes = [
+      `${prefix}-episode-${ep}-english-subbed`,
+      `${prefix}-episode-${ep}-english-dubbed`,
+      `${prefix}-episode-${ep}`,
+    ];
     for (const p of probes) {
       if (await gogoEpisodeExists(p)) {
         path = p;
@@ -333,7 +339,7 @@ async function extractEpisodeSources(slug: string, ep: number): Promise<ExtractR
       }
     }
   }
-  if (!path) return { status: 'no-episode' };
+  if (!path) return { status: series ? 'no-episode' : 'no-category' };
   const players = await gogoEpisodePlayers(path);
   for (const link of players) {
     const sources = await gogoPlayerSources(link);
