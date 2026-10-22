@@ -829,21 +829,34 @@ export default function Player({
             allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
             referrerPolicy="origin"
-            /* Capability jail: scripts + storage keep the upstream player
-               fully working (HLS/MSE, autoplay, prefs), but WITHOUT
-               allow-top-navigation / allow-popups a click on the video can
-               no longer drag the user out of Ajest to the provider's site
-               or an ad tab (ani.pm does exactly this). Cross-origin content
-               can never escape the sandbox to touch our DOM. */
-            sandbox="allow-scripts allow-same-origin"
             title={`Ajest — ${providerLabel(extEmbed.provider)}`}
           />
+          {/* ani.pm redirect shield — their player refuses sandboxed frames
+              ("This player can't run in a sandboxed frame"), so there is no
+              sandbox; without it, tapping the video surface top-navigates the
+              page to their site. This shield covers everything EXCEPT the
+              bottom 96px where their own pause/seek bar lives: the redirect
+              layer never receives a click, their controls stay usable, and
+              mousemove over the video wakes the Ajest chrome (cross-origin
+              frames normally swallow it). */}
+          {extEmbed.provider === 'anipm' && (
+            <div
+              className="absolute inset-x-0 top-0 z-10"
+              style={{ bottom: 96 }}
+              onMouseMove={bumpControls}
+              onClick={bumpControls}
+              aria-hidden="true"
+            />
+          )}
           {/* Wake strips — cross-origin iframes swallow mousemove, so these
               thin strips above the iframe re-summon the chrome on hover/tap
               while the middle of the screen stays fully interactive for the
-              upstream player's own controls. */}
+              upstream player's own controls. ani.pm skips the bottom strip —
+              that zone is its live control-bar passthrough instead. */}
           <div className="absolute inset-x-0 top-0 z-[5] h-14" onMouseMove={bumpControls} onClick={bumpControls} />
-          <div className="absolute inset-x-0 bottom-0 z-[5] h-14" onMouseMove={bumpControls} onClick={bumpControls} />
+          {extEmbed.provider !== 'anipm' && (
+            <div className="absolute inset-x-0 bottom-0 z-[5] h-14" onMouseMove={bumpControls} onClick={bumpControls} />
+          )}
           <div
             className={`absolute bottom-5 right-4 z-30 flex items-center gap-2.5 rounded-full bg-black/70 px-3.5 py-1.5 text-[11.5px] font-semibold text-white/80 ring-1 ring-white/15 backdrop-blur transition-opacity duration-300 ${
               showControls || phase !== 'playing' ? 'opacity-100' : 'opacity-0 pointer-events-none'
