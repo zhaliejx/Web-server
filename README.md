@@ -71,6 +71,28 @@ npm run dev               # http://localhost:3000
 Works the same on any Node host (Fly, Railway, VPS, home server):
 build once, run `npx next start`, set `DATABASE_URL`.
 
+## Deploy (Vercel)
+
+Zero-config — `vercel.json` in the repo root pins the correct steps:
+
+- **Install:** `npm install`  ·  **Build:** `next build` (framework preset: Next.js)
+- Do **NOT** paste the Render build command above into the dashboard — on
+  Vercel the build step runs with `NODE_ENV=production`, so an `npm install`
+  inside it prunes devDependencies (`@tailwindcss/postcss`) and the build
+  crashes. `vercel.json` overrides the dashboard fields anyway.
+- `prisma generate` / `mkdir -p db` are not needed: nothing in `src/` imports
+  the Prisma client (scaffold leftover; history & prefs live in browser
+  localStorage, so serverless is a perfect fit — no disk concerns).
+- Every `/api/*` route already declares `maxDuration` (30–60s), inside the
+  Hobby plan's 300s ceiling.
+- Optional env: `RELAY_HOSTS=https://api-ajest.vercel.app` (skips the dead
+  localhost + sleeping Render hops). Region tip: `sin1` (Singapore) is the
+  lowest-latency choice for PH/SEA viewers — set under Settings → Functions.
+- Caveat (same as any shared-egress host): gogo's CDN sometimes rejects
+  cloud IPs during stream extraction, so the gogo tier can be flaky from
+  Vercel. ani.pm / kaizen / YouTube and the manga tiers are unaffected —
+  ani.pm wins most resolutions anyway.
+
 ## Companion API
 
 The scraper API (gogo/AnimePahe/Crunchyroll/AnimeKai/MangaDex providers) is a
