@@ -60,21 +60,6 @@ function providerLabel(p: string): string {
 // verified-missing episodes auto-switch provider).
 const aniPmCache = new Map<number, { at: number; numbers?: Set<number> }>();
 const ANIPM_EP_RE = /^https:\/\/ani\.pm\/embed\/ani\/(\d+)\/(\d+)\/(?:sub|dub)(?:[?#]|$)/;
-// Their shell treats these episode-level codes as final (shows its own
-// terminal error UI — which our shield hides, so we fail over instead).
-const ANIPM_FATAL_ERRORS = new Set([
-  'episode-not-found',
-  'title-not-found',
-  'adult-not-enabled',
-  'app-suspended',
-  'source-absent',
-  'stream-unavailable',
-  'player-crashed',
-  'sandboxed',
-  'invalid-key',
-  'key-required',
-  'origin-not-allowed',
-]);
 async function aniPmEpisodeExists(anilistId: number, episode: number): Promise<boolean | null> {
   const hit = aniPmCache.get(anilistId);
   if (hit && Date.now() - hit.at < 600000) {
@@ -203,28 +188,6 @@ export default function Player({
   const anipmPausedRef = useRef(false);
   const extProviderRef = useRef('');
   const [anipmSeekFailed, setAnipmSeekFailed] = useState(false);
-  // True when no partner-API event ever arrives (API off / origin policy
-  // change). The frame stays FULLY sealed — there is no interactive
-  // passthrough anymore (that would re-open their click-driven ad layer).
-  // If other providers exist we fail over automatically; only on the last
-  // source does this flag stick, keeping the video running sealed while the
-  // wall-clock tracker keeps watch-time. Their pixels never show: the
-  // video-window mask below is independent of API state.
-  const [anipmApiDead, setAnipmApiDead] = useState(false);
-  // True once their embed reported real playback (timeupdate past 3s).
-  // Errors that arrive before ANY playback are treated as fatal — their
-  // error screens otherwise linger sealed-but-visible inside the frame.
-  const anipmPlayedRef = useRef(false);
-  // Live size of the player shell — drives the video-window mask geometry.
-  const [shellSize, setShellSize] = useState({ w: 0, h: 0 });
-  // Latest playback clock mirror — seekBy/seekTo post commands from closures
-  // that never see fresh state.
-  const anipmTimeRef = useRef({ t: 0, d: 0 });
-  // One-shot guard: ani.pm fatal-error and availability switches must fire
-  // once per embed (both can race — a missing episode trips them together).
-  const anipmErrHandledRef = useRef(false);
-  // Mirror for the keyboard 'm' shortcut (its effect closure never re-runs).
-  const mutedRef = useRef(false);
   // Wall-clock fallback tracker for embeds with no playback API (Kaizen, or
   // ani.pm with its partner API disabled) — counts visible time only.
   const extEstDurRef = useRef(0);
@@ -251,7 +214,6 @@ export default function Player({
     onProgressRef.current = onProgress;
     onNextRef.current = onNextEpisode;
     hasNextRef.current = hasNext;
-    mutedRef.current = muted;
   });
 
   // Unified pause check across direct streams and embedded sources.
@@ -357,23 +319,12 @@ export default function Player({
     ytFailRef.current = null;
 
     // ── External embed (ani.pm / AnimeKaizen) — provider-rendered playback ──
-    // Kaizen: iframe stays interactive, full Ajest chrome around it.
-    // ani.pm ("HD player"): their embed ships a click-catcher pop-under ad
-    // layer (embed.settlar.io/ad/pop → aclib runPop) and can top-navigate.
-    // Countermeasure: a FULL interaction shield — no click ever reaches their
-    // document, so their frame never holds user activation and the browser
-    // itself blocks cross-origin top-frame redirects and popup attempts
-    // (their pop-under is click-driven and can never arm). A sandbox would
-    // NOT work here: their embed probes `document.domain = document.domain`,
-    // which Chrome forbids in any sandboxed frame, making their player
-    // refuse to start. All playback control rides their postMessage partner
-    // API (play/pause/seek/volume/rate commands; timeupdate/play/pause/
-    // ended events) — watch-time tracking and auto-resume included. If the
-    // API never wakes the frame is NEVER made interactive again — it fails
-    // over to the next provider (or, on the last source, keeps playing
-    // sealed with wall-clock tracking). Their pixels are additionally
-    // confined to the video rectangle by the video-window mask (their own
-    // navigation/chrome can never show — see the render section).
+    // Cross-origin player: its own controls handle playback. ani.pm renders
+    // its full UI, so Ajest chrome (top bar + provider chip) is suppressed
+    // there — it collides with the built-in controls; only the tap-zone
+    // guardrail shield and an auto-hiding close button remain. Kaizen keeps
+    // the full Ajest chrome. ani.pm additionally exposes a postMessage
+    // partner API — watch-time tracking and auto-resume ride on it.
     if (src.url.startsWith('embed:')) {
       const embedUrl = src.url.slice('embed:'.length);
       setYtEmbed(null);
@@ -384,11 +335,7 @@ export default function Player({
       anipmApiSeenRef.current = false;
       anipmSeekOkRef.current = false;
       anipmPausedRef.current = false;
-      anipmErrHandledRef.current = false;
-      anipmPlayedRef.current = false;
-      anipmTimeRef.current = { t: 0, d: 0 };
       setAnipmSeekFailed(false);
-      setAnipmApiDead(false);
       extNextRef.current = () => nextSource(`${providerLabel(src.provider)} unavailable — switching provider…`);
       // Estimated runtime (metadata minutes) — feeds the wall-clock fallback
       // tracker and the progress bar when the embed can't report real time.
@@ -399,36 +346,11 @@ export default function Player({
         const m = ANIPM_EP_RE.exec(embedUrl);
         if (m) {
           void aniPmEpisodeExists(Number(m[1]), Number(m[2])).then((exists) => {
-            if (exists === false && activeEmbedUrlRef.current === embedUrl && !anipmErrHandledRef.current) {
-              anipmErrHandledRef.current = true;
+            if (exists === false && activeEmbedUrlRef.current === embedUrl) {
               extNextRef.current?.();
             }
           });
         }
-        // Kill their shell-side auto-next: on 'ended' their shell reloads the
-        // next episode in-frame (racing Ajest's own chain-driven auto-next).
-        // The command persists in their embed settings, so it sticks across
-        // episodes once acked.
-        for (const delay of [400, 1500, 4000]) {
-          setTimeout(() => {
-            if (activeEmbedUrlRef.current === embedUrl) anipmPost('setAutoNext', { on: false });
-          }, delay);
-        }
-        // Fail-safe: if their partner API never emits (API off / origin
-        // policy change), a fully-shielded frame is uncontrollable. NEVER
-        // degrade to an interactive passthrough — their controls are the ad
-        // vector we sealed in the first place. Fail over to the next
-        // provider instead; on the last source, keep the video running
-        // sealed (wall-clock tracking keeps watch-time) and say so.
-        setTimeout(() => {
-          if (activeEmbedUrlRef.current !== embedUrl || anipmApiSeenRef.current) return;
-          if (srcIdxRef.current < sourcesRef.current.length - 1) {
-            extNextRef.current?.();
-          } else {
-            setAnipmApiDead(true);
-            setFallbackNote('HD player is running without remote control — playback continues.');
-          }
-        }, 7000);
         // Auto-resume via the partner API — a seek sent before playback starts
         // becomes the player's start position. Retry while their shell boots;
         // the ack flips anipmSeekOkRef, cancelling retries and the hint.
@@ -570,56 +492,12 @@ export default function Player({
     attachRef.current = attachSource;
   }, [attachSource]);
 
-  // ── ani.pm video-window mask geometry ─────────────────────────────────────
-  // Their embed always renders its own chrome: player controls, an episode
-  // list drawer, poster/error screens — and on mobile their whole site UI
-  // (bottom tab navigation) when their shell ever lands on a site page
-  // (nonce-expiry reloads hit a 404 on their /embed/v1 route; top-level
-  // opens 302 to their site). Cross-origin CSS injection is impossible and
-  // no partner command hides their UI — so we hide it GEOMETRICALLY: opaque
-  // bars cover everything outside the video rectangle. Their player
-  // letterboxes (contain), so the video always sits inside the window;
-  // everything they render at their viewport edges (navigation, control
-  // bars, drawers, footers) falls in the covered zone and never shows.
-  // Window is 4:3-safe tall / 16:9-safe wide so no plausible aspect clips.
-  useEffect(() => {
-    const el = shellRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver((entries) => {
-      const r = entries[0]?.contentRect;
-      if (r && r.width > 0 && r.height > 0) {
-        setShellSize((prev) =>
-          Math.round(r.width) === prev.w && Math.round(r.height) === prev.h
-            ? prev
-            : { w: Math.round(r.width), h: Math.round(r.height) }
-        );
-      }
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
   // ── ani.pm partner API — precise watch-time tracking + resume ack ──────────
   useEffect(() => {
     if (extEmbed?.provider !== 'anipm') return;
     const onMsg = (e: MessageEvent) => {
       const d = e.data as
-        | {
-            ns?: string;
-            v?: number;
-            id?: number;
-            ok?: boolean;
-            event?: string;
-            data?: {
-              currentTime?: number;
-              duration?: number;
-              paused?: boolean;
-              volume?: number;
-              muted?: boolean;
-              code?: string;
-              message?: string;
-            };
-          }
+        | { ns?: string; v?: number; id?: number; ok?: boolean; event?: string; data?: { currentTime?: number; duration?: number; paused?: boolean } }
         | null;
       if (!d || typeof d !== 'object' || d.ns !== 'anipm.player' || d.v !== 1) return;
       const frame = anipmFrameRef.current;
@@ -639,8 +517,6 @@ export default function Player({
         const dur = Number(d.data?.duration) || 0;
         const paused = !!d.data?.paused;
         anipmPausedRef.current = paused;
-        anipmTimeRef.current = { t, d: dur };
-        if (t > 3) anipmPlayedRef.current = true;
         setPlaying(!paused);
         if (!paused && t > 3) {
           const nowTs = Date.now();
@@ -659,35 +535,17 @@ export default function Player({
         setPlaying(false);
         setShowControls(true);
         if (hideTimer.current) clearTimeout(hideTimer.current);
-      } else if (d.event === 'volumechange') {
-        const vol = Number(d.data?.volume);
-        if (isFinite(vol) && vol >= 0 && vol <= 1) setVolume(vol);
-        setMuted(!!d.data?.muted);
       } else if (d.event === 'ended') {
         anipmPausedRef.current = true;
         setPlaying(false);
         const dur = Number(d.data?.duration) || 0;
         onProgressRef.current(dur, dur); // mark complete
         if (hasNextRef.current) onNextRef.current(); // auto-next episode
-      } else if (d.event === 'error') {
-        // Their error screens render inside the (shielded) frame — surface
-        // them by failing over to the next provider instead. Fatal codes
-        // always switch; ANY error before real playback started also
-        // switches (their transient error states would otherwise linger
-        // visible inside the sealed frame with no way to dismiss them).
-        const code = typeof d.data?.code === 'string' ? d.data.code : '';
-        if (
-          !anipmErrHandledRef.current &&
-          ((code && ANIPM_FATAL_ERRORS.has(code)) || !anipmPlayedRef.current)
-        ) {
-          anipmErrHandledRef.current = true;
-          extNextRef.current?.();
-        }
       }
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
-  }, [extEmbed, bumpControls, anipmPost]);
+  }, [extEmbed, bumpControls]);
 
   // ── Wall-clock fallback tracker — embeds with no playback API ─────────────
   // Kaizen (and ani.pm with its API disabled) expose no playback clock. Count
@@ -936,18 +794,11 @@ export default function Player({
       bumpControls();
       return;
     }
-    // ani.pm — command bridge into the partner API. Their own control surface
-    // is fully shielded; Ajest is the only control layer.
-    if (extActiveRef.current && extProviderRef.current === 'anipm') {
-      anipmPost(anipmPausedRef.current ? 'play' : 'pause');
-      bumpControls();
-      return;
-    }
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) v.play().catch(() => undefined);
     else v.pause();
-  }, [bumpControls, anipmPost]);
+  }, [bumpControls]);
 
   const seekBy = useCallback(
     (delta: number) => {
@@ -959,20 +810,13 @@ export default function Player({
         bumpControls();
         return;
       }
-      if (extActiveRef.current && extProviderRef.current === 'anipm') {
-        const { t, d: dur } = anipmTimeRef.current;
-        const at = Math.min(Math.max(0, t + delta), dur ? dur - 0.5 : Number.MAX_SAFE_INTEGER);
-        anipmPost('seek', { time: at });
-        bumpControls();
-        return;
-      }
       const v = videoRef.current;
       if (v && isFinite(v.duration)) {
         v.currentTime = Math.min(Math.max(0, v.currentTime + delta), v.duration - 0.5);
         bumpControls();
       }
     },
-    [bumpControls, anipmPost]
+    [bumpControls]
   );
 
   const toggleFullscreen = useCallback(() => {
@@ -1000,9 +844,7 @@ export default function Player({
       else if (e.key === 'ArrowLeft') seekBy(-10);
       else if (e.key === 'f') toggleFullscreen();
       else if (e.key === 'm') {
-        if (extActiveRef.current && extProviderRef.current === 'anipm') {
-          anipmPost('setMuted', { muted: !mutedRef.current });
-        } else if (ytActiveRef.current) {
+        if (ytActiveRef.current) {
           const p = ytPlayerRef.current;
           if (p) {
             if (ytInfo.current.muted) p.unMute();
@@ -1022,7 +864,7 @@ export default function Player({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [togglePlay, seekBy, toggleFullscreen, onClose, bumpControls, anipmPost]);
+  }, [togglePlay, seekBy, toggleFullscreen, onClose, bumpControls]);
 
   const seekTo = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -1031,11 +873,6 @@ export default function Player({
       const p = ytPlayerRef.current;
       const dur = ytInfo.current.duration;
       if (p && dur > 0) p.seekTo(pct * dur, true);
-      return;
-    }
-    if (extActiveRef.current && extProviderRef.current === 'anipm') {
-      const dur = anipmTimeRef.current.d;
-      if (dur > 0) anipmPost('seek', { time: pct * dur });
       return;
     }
     const v = videoRef.current;
@@ -1054,8 +891,6 @@ export default function Player({
     if (ytActiveRef.current) {
       const p = ytPlayerRef.current;
       if (p) p.setPlaybackRate(s);
-    } else if (extActiveRef.current && extProviderRef.current === 'anipm') {
-      anipmPost('setPlaybackRate', { rate: s });
     } else if (videoRef.current) videoRef.current.playbackRate = s;
     setSpeed(s);
     setSettingsOpen(false);
@@ -1123,20 +958,10 @@ export default function Player({
       )}
 
       {/* ── External embed (ani.pm / AnimeKaizen) — provider-rendered playback.
-              ani.pm: fully shielded, Ajest chrome drives playback through the
-              partner API (their ad pop-under layer can never fire).
-              Kaizen: interactive iframe with wake strips + provider chip. ── */}
+              ani.pm: zero Ajest chrome (guardrail shield + auto-hiding close only).
+              Kaizen: full Ajest chrome (wake strips + provider chip). ── */}
       {extEmbed && (
         <>
-          {/* NOTE: deliberately NOT sandboxed. Their embed probes for sandboxes
-              via `document.domain = document.domain`, which Chrome forbids in
-              ANY sandboxed frame (even with allow-same-origin) — tripping it
-              makes their player refuse to start. The redirect/ads protection
-              comes entirely from the shield below: no click ever enters their
-              frame, so their frame never holds user activation — and Chrome
-              blocks cross-origin top-frame navigation and pop-unders from
-              activation-less frames (verified against Chrome's own
-              SecurityError). */}
           <iframe
             ref={anipmFrameRef}
             src={extEmbed.url}
@@ -1146,71 +971,38 @@ export default function Player({
             referrerPolicy="origin"
             title={`Ajest — ${providerLabel(extEmbed.provider)}`}
           />
-          {/* ani.pm ad shield — FULL coverage, ALWAYS. Their embed ships a
-              click-catcher pop-under layer (embed.settlar.io/ad/pop) that
-              goes click-through on a cooldown and fires an ad on the next
-              tap anywhere in their document. With zero clicks reaching their
-              document: the catcher can never arm, their frame never gains
-              user activation, so Chrome blocks their cross-origin top-frame
-              redirect and popup attempts at the browser level. Playback
-              control rides the partner API instead of their UI; mousemove
-              still wakes the Ajest chrome. No passthrough exists in any
-              state — an API-less frame fails over (or runs sealed), it is
-              never made tappable. */}
-          {/* ani.pm video-window mask — opaque bars over everything outside
-              the video rectangle (geometry above). Their navigation, bottom
-              tab bar, control bars, episode drawer and site pages can never
-              show; only their letterboxed video is visible through the
-              window. Re-rendered per shellSize so rotation/fullscreen stay
-              exact. */}
-          {extEmbed.provider === 'anipm' && shellSize.w > 0 && shellSize.h > 0 && (
-            <>
-              {(() => {
-                const winW = Math.min(shellSize.w, (shellSize.h * 16) / 9);
-                const winH = Math.min(shellSize.h, (shellSize.w * 3) / 4);
-                const vPad = Math.max(0, (shellSize.h - winH) / 2);
-                const sideW = Math.max(0, (shellSize.w - winW) / 2);
-                const bar = 'pointer-events-none absolute z-[6] bg-black';
-                return (
-                  <>
-                    {vPad > 0 && (
-                      <>
-                        <div aria-hidden className={`${bar} inset-x-0 top-0`} style={{ height: vPad }} />
-                        <div aria-hidden className={`${bar} inset-x-0 bottom-0`} style={{ height: vPad }} />
-                      </>
-                    )}
-                    {sideW > 0 && (
-                      <>
-                        <div aria-hidden className={`${bar} inset-y-0 left-0`} style={{ width: sideW }} />
-                        <div aria-hidden className={`${bar} inset-y-0 right-0`} style={{ width: sideW }} />
-                      </>
-                    )}
-                  </>
-                );
-              })()}
-            </>
-          )}
+          {/* ani.pm redirect shield — their player refuses sandboxed frames
+              ("This player can't run in a sandboxed frame"), so there is no
+              sandbox; without it, tapping the video surface top-navigates the
+              page to their site. This shield covers everything EXCEPT the
+              bottom 96px where their own pause/seek bar lives: the redirect
+              layer never receives a click, their controls stay usable, and
+              mousemove over the video still wakes the auto-hiding close
+              button (cross-origin frames normally swallow it). */}
           {extEmbed.provider === 'anipm' && (
             <div
-              className="absolute inset-0 z-10 cursor-pointer"
+              className="absolute inset-x-0 top-0 z-10"
+              style={{ bottom: 96 }}
               onMouseMove={bumpControls}
-              onClick={togglePlay}
+              onClick={bumpControls}
               aria-hidden="true"
             />
           )}
           {/* Wake strips — cross-origin iframes swallow mousemove, so these
               thin strips above the iframe re-summon the chrome on hover/tap
               while the middle of the screen stays fully interactive for the
-              upstream player's own controls. ani.pm skips both strips: its
-              full-coverage shield wakes the chrome on every mousemove. */}
+              upstream player's own controls. ani.pm skips both strips: the
+              guardrail shield already covers the top (and wakes the close
+              button), and the bottom zone is its live control-bar
+              passthrough. */}
           {extEmbed.provider !== 'anipm' && (
             <>
               <div className="absolute inset-x-0 top-0 z-[5] h-14" onMouseMove={bumpControls} onClick={bumpControls} />
               <div className="absolute inset-x-0 bottom-0 z-[5] h-14" onMouseMove={bumpControls} onClick={bumpControls} />
             </>
           )}
-          {/* ani.pm: no floating provider chip — the top bar already shows the
-              source pill and the bottom control bar owns all actions.
+          {/* ani.pm: no provider chip — it floats inside the bottom 96px
+              passthrough zone and steals taps from the upstream control bar.
               Availability auto-switching (extNextRef) still runs headless. */}
           {extEmbed.provider !== 'anipm' && (
             <div
@@ -1348,55 +1140,65 @@ export default function Player({
         </div>
       )}
 
-      {/* ── Top bar — Ajest-native for ALL sources. ani.pm's own UI never
-          shows (fully shielded), so the old anipm suppression is gone. ── */}
-      <div className={`absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/85 to-transparent p-4 transition-opacity duration-300 md:p-5 ${showControls || phase !== 'playing' ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-white md:text-base">{anime.title}</p>
-            <p className="mt-0.5 text-xs text-white/60">
-              Episode {episode}
-              {episodeTitle ? ` · ${episodeTitle}` : ''}
-              {activeProvider && !activeProvider.startsWith('youtube') && (
-                <span className="ml-2 inline-flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-                  <span className="h-1 w-1 rounded-full bg-[#4ade80]" /> {providerLabel(activeProvider)}
-                </span>
-              )}
-            </p>
+      {/* ── Top bar ──
+          ani.pm (HD player): suppressed entirely — the gradient, title and
+          provider pill overlay the upstream player's built-in controls. A
+          lone auto-hiding close button stays as the escape hatch (mobile has
+          no Escape key). */}
+      {extEmbed?.provider !== 'anipm' && (
+        <div className={`absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/85 to-transparent p-4 transition-opacity duration-300 md:p-5 ${showControls || phase !== 'playing' ? 'opacity-100' : 'pointer-events-none opacity-0'}`}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-white md:text-base">{anime.title}</p>
+              <p className="mt-0.5 text-xs text-white/60">
+                Episode {episode}
+                {episodeTitle ? ` · ${episodeTitle}` : ''}
+                {activeProvider && !activeProvider.startsWith('youtube') && (
+                  <span className="ml-2 inline-flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                    <span className="h-1 w-1 rounded-full bg-[#4ade80]" /> {providerLabel(activeProvider)}
+                  </span>
+                )}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/50 text-white/85 transition hover:bg-black/80 hover:text-white"
+              aria-label="Close player"
+            >
+              <IconClose size={18} />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/50 text-white/85 transition hover:bg-black/80 hover:text-white"
-            aria-label="Close player"
-          >
-            <IconClose size={18} />
-          </button>
         </div>
-      </div>
+      )}
+      {extEmbed?.provider === 'anipm' && (
+        <button
+          onClick={onClose}
+          className={`absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white/85 backdrop-blur transition-opacity duration-300 hover:bg-black/80 hover:text-white md:right-5 md:top-5 ${
+            showControls || phase !== 'playing' ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
+          aria-label="Close player"
+        >
+          <IconClose size={18} />
+        </button>
+      )}
       {/* ani.pm resume hint — the seek command never got acked (origin policy
           or API off), so the HD player started at 0. Surface the saved point
-          so the user can drag the Ajest seek bar there. Sits below the top
-          bar (the bar owns the top strip). */}
+          so the user can drag their own seek bar there. */}
       {extEmbed?.provider === 'anipm' && !!resumeAt && resumeAt >= 60 && anipmSeekFailed && (
         <div
-          className={`absolute left-4 top-20 z-20 max-w-[62vw] rounded-full bg-black/65 px-3.5 py-2 text-[11.5px] font-semibold text-white/85 ring-1 ring-white/15 backdrop-blur transition-opacity duration-300 md:left-5 md:top-[5.5rem] ${
+          className={`absolute left-4 top-4 z-20 max-w-[62vw] rounded-full bg-black/65 px-3.5 py-2 text-[11.5px] font-semibold text-white/85 ring-1 ring-white/15 backdrop-blur transition-opacity duration-300 md:left-5 md:top-5 ${
             showControls || phase !== 'playing' ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
         >
           <span className="text-[var(--aj-acc-hi)]">Resume ≈ {fmtTime(resumeAt)}</span>
-          <span className="font-normal text-white/55"> — drag the seek bar</span>
+          <span className="font-normal text-white/55"> — seek there in the player</span>
         </div>
       )}
 
-      {/* ── Bottom controls (Ajest-native for ALL sources) ──
-          ani.pm: always visible — every control posts into the partner API
-          (play/pause/seek/volume/rate). There is no passthrough mode anymore:
-          even with their API dead the frame stays sealed and these controls
-          remain the only chrome (best-effort). Hidden for other embeds,
-          which keep their own interactive controls. */}
+      {/* ── Bottom controls (Ajest-native for ALL sources) ── */}
       <div
         className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-4 pb-3 pt-10 md:px-6 transition-opacity duration-300 ${
-          extEmbed && extEmbed.provider !== 'anipm'
+          extEmbed
             ? 'hidden'
             : showControls || phase !== 'playing'
               ? 'opacity-100'
@@ -1452,10 +1254,6 @@ export default function Player({
           <div className="group/vol flex items-center gap-2">
             <button
               onClick={() => {
-                if (extActiveRef.current && extProviderRef.current === 'anipm') {
-                  anipmPost('setMuted', { muted: !muted });
-                  return;
-                }
                 if (ytActiveRef.current) {
                   const p = ytPlayerRef.current;
                   if (p) {
@@ -1482,13 +1280,6 @@ export default function Player({
               step={0.05}
               value={muted ? 0 : volume}
               onChange={(e) => {
-                if (extActiveRef.current && extProviderRef.current === 'anipm') {
-                  const vol = parseFloat(e.target.value);
-                  anipmPost('setVolume', { volume: vol, muted: vol === 0 });
-                  setVolume(vol);
-                  setMuted(vol === 0);
-                  return;
-                }
                 if (ytActiveRef.current) {
                   const p = ytPlayerRef.current;
                   const vol = parseFloat(e.target.value);
@@ -1572,9 +1363,7 @@ export default function Player({
           {hasNext && (
             <button
               onClick={onNextEpisode}
-              className={`inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-[12px] font-semibold text-white/85 transition hover:bg-[var(--aj-acc)] hover:text-black ${
-                extEmbed?.provider === 'anipm' ? '' : 'hidden sm:inline-flex'
-              }`}
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-[12px] font-semibold text-white/85 transition hover:bg-[var(--aj-acc)] hover:text-black"
             >
               Next EP <IconSkipForward size={13} />
             </button>
