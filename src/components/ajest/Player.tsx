@@ -172,6 +172,21 @@ export default function Player({
   const extNextRef = useRef<(() => void) | null>(null);
   // Race guard for async embed validation — only act while THIS embed is live
   const activeEmbedUrlRef = useRef<string | null>(null);
+  // ── ani.pm partner API (postMessage) — watch-time + auto-resume ──
+  // ani.pm's embed shell (ns 'anipm.player' v1) emits timeupdate/play/pause/
+  // ended events to the parent and accepts seek/play/pause commands. Events
+  // are delivered even when the parent origin is unlisted ('*' target);
+  // command acks (reply carrying the request id) tell us the seek ran.
+  const anipmFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const anipmApiSeenRef = useRef(false);
+  const anipmSeekOkRef = useRef(false);
+  const anipmPausedRef = useRef(false);
+  const extProviderRef = useRef('');
+  const [anipmSeekFailed, setAnipmSeekFailed] = useState(false);
+  // Wall-clock fallback tracker for embeds with no playback API (Kaizen, or
+  // ani.pm with its partner API disabled) — counts visible time only.
+  const extEstDurRef = useRef(0);
+  const embedWallRef = useRef<{ base: number; last: number } | null>(null);
   const [ytHint, setYtHint] = useState(false);
 
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -209,7 +224,9 @@ export default function Player({
       ytActiveRef.current
         ? !ytInfo.current.playing
         : extActiveRef.current
-          ? false
+          ? extProviderRef.current === 'anipm'
+            ? anipmPausedRef.current
+            : false
           : (videoRef.current?.paused ?? true),
     []
   );
@@ -239,6 +256,17 @@ export default function Player({
   useEffect(() => {
     resumeAtRef.current = resumeAt ?? 0;
   }, [resumeAt]);
+
+  // Fire a partner-API command into the ani.pm embed shell
+  const anipmPost = useCallback((cmd: string, args?: Record<string, unknown>) => {
+    const win = anipmFrameRef.current?.contentWindow;
+    if (!win) return;
+    try {
+      win.postMessage({ ns: 'anipm.player', v: 1, cmd, args: args ?? {} }, 'https://ani.pm');
+    } catch {
+      /* frame not ready */
+    }
+  }, []);
 
   // ── Source attachment with automatic provider fallback ────────────────────
   // Self-recursion (fatal error → next provider) goes through a ref declared
@@ -286,18 +314,28 @@ export default function Player({
     ytFailRef.current = null;
 
     // ── External embed (ani.pm / AnimeKaizen) — provider-rendered playback ──
-    // Cross-origin player: Ajest cannot drive it, so its own controls handle
-    // playback. ani.pm renders its full UI, so Ajest chrome (top bar +
-    // provider chip) is suppressed there — it collides with the built-in
-    // controls; only the tap-zone guardrail shield and an auto-hiding close
-    // button remain. Kaizen keeps the full Ajest chrome.
+    // Cross-origin player: its own controls handle playback. ani.pm renders
+    // its full UI, so Ajest chrome (top bar + provider chip) is suppressed
+    // there — it collides with the built-in controls; only the tap-zone
+    // guardrail shield and an auto-hiding close button remain. Kaizen keeps
+    // the full Ajest chrome. ani.pm additionally exposes a postMessage
+    // partner API — watch-time tracking and auto-resume ride on it.
     if (src.url.startsWith('embed:')) {
       const embedUrl = src.url.slice('embed:'.length);
       setYtEmbed(null);
       ytActiveRef.current = false;
       setExtEmbed({ url: embedUrl, provider: src.provider, note: src.note });
       activeEmbedUrlRef.current = embedUrl;
+      extProviderRef.current = src.provider;
+      anipmApiSeenRef.current = false;
+      anipmSeekOkRef.current = false;
+      anipmPausedRef.current = false;
+      setAnipmSeekFailed(false);
       extNextRef.current = () => nextSource(`${providerLabel(src.provider)} unavailable — switching provider…`);
+      // Estimated runtime (metadata minutes) — feeds the wall-clock fallback
+      // tracker and the progress bar when the embed can't report real time.
+      extEstDurRef.current = Math.max(0, (anime.duration || 0) * 60);
+      embedWallRef.current = { base: resumeAtRef.current || 0, last: Date.now() };
       // ani.pm episodes: verify in-browser; auto-switch only on a confirmed miss
       if (src.provider === 'anipm') {
         const m = ANIPM_EP_RE.exec(embedUrl);
@@ -307,6 +345,23 @@ export default function Player({
               extNextRef.current?.();
             }
           });
+        }
+        // Auto-resume via the partner API — a seek sent before playback starts
+        // becomes the player's start position. Retry while their shell boots;
+        // the ack flips anipmSeekOkRef, cancelling retries and the hint.
+        const at = resumeAtRef.current;
+        if (at && at > 8) {
+          const target = Math.max(5, at - 4);
+          for (const delay of [400, 1200, 2600, 4500]) {
+            setTimeout(() => {
+              if (activeEmbedUrlRef.current === embedUrl && !anipmSeekOkRef.current) {
+                anipmPost('seek', { time: target });
+              }
+            }, delay);
+          }
+          setTimeout(() => {
+            if (activeEmbedUrlRef.current === embedUrl && !anipmSeekOkRef.current) setAnipmSeekFailed(true);
+          }, 6500);
         }
       }
       setCurrent(0);
@@ -318,7 +373,8 @@ export default function Player({
       // over the player on its own, so without this the title + source pills
       // would stay visible forever (the exact "stuck pills" bug).
       bumpControls();
-      onProgress(0, 0);
+      // Record the episode + any carried-over resume point before first tick
+      onProgress(resumeAtRef.current || 0, extEstDurRef.current);
       return;
     }
     setExtEmbed(null);
@@ -384,6 +440,11 @@ export default function Player({
       hlsRef.current = hls;
       hls.loadSource(url);
       hls.attachMedia(video);
+      // Resume also on loadedmetadata — MANIFEST_PARSED can fire while
+      // video.duration is still 0/NaN (MSE init segment not yet appended),
+      // which silently skipped the saved watch-time. applyResume self-guards
+      // against double application.
+      video.addEventListener('loadedmetadata', () => applyResume(video), { once: true });
       hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) => {
         if (watchdogRef.current) clearTimeout(watchdogRef.current);
         setLevels(
@@ -419,12 +480,99 @@ export default function Player({
       armWatchdog();
     }
 
-  }, [onProgress, bumpControls]);
+  }, [onProgress, bumpControls, anime, anipmPost]);
 
   // Register the attach implementation for recursive fallback calls
   useEffect(() => {
     attachRef.current = attachSource;
   }, [attachSource]);
+
+  // ── ani.pm partner API — precise watch-time tracking + resume ack ──────────
+  useEffect(() => {
+    if (extEmbed?.provider !== 'anipm') return;
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data as
+        | { ns?: string; v?: number; id?: number; ok?: boolean; event?: string; data?: { currentTime?: number; duration?: number; paused?: boolean } }
+        | null;
+      if (!d || typeof d !== 'object' || d.ns !== 'anipm.player' || d.v !== 1) return;
+      const frame = anipmFrameRef.current;
+      if (!frame || e.source !== frame.contentWindow || e.origin !== 'https://ani.pm') return;
+      // Command ack — our seek (or other command) was accepted
+      if (typeof d.id === 'number') {
+        if (d.ok) {
+          anipmSeekOkRef.current = true;
+          setAnipmSeekFailed(false);
+        }
+        return;
+      }
+      if (typeof d.event !== 'string') return;
+      anipmApiSeenRef.current = true;
+      if (d.event === 'timeupdate') {
+        const t = Number(d.data?.currentTime) || 0;
+        const dur = Number(d.data?.duration) || 0;
+        const paused = !!d.data?.paused;
+        anipmPausedRef.current = paused;
+        setPlaying(!paused);
+        if (!paused && t > 3) {
+          const nowTs = Date.now();
+          if (nowTs - lastSaveRef.current > 5000) {
+            lastSaveRef.current = nowTs;
+            onProgressRef.current(t, dur); // true watch-time → History
+          }
+        }
+      } else if (d.event === 'play') {
+        anipmPausedRef.current = false;
+        setPlaying(true);
+        setPhase('playing');
+        bumpControls();
+      } else if (d.event === 'pause' || d.event === 'autoplayblocked') {
+        anipmPausedRef.current = true;
+        setPlaying(false);
+        setShowControls(true);
+        if (hideTimer.current) clearTimeout(hideTimer.current);
+      } else if (d.event === 'ended') {
+        anipmPausedRef.current = true;
+        setPlaying(false);
+        const dur = Number(d.data?.duration) || 0;
+        onProgressRef.current(dur, dur); // mark complete
+        if (hasNextRef.current) onNextRef.current(); // auto-next episode
+      }
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [extEmbed, bumpControls]);
+
+  // ── Wall-clock fallback tracker — embeds with no playback API ─────────────
+  // Kaizen (and ani.pm with its API disabled) expose no playback clock. Count
+  // visible wall-clock time as a best-effort estimate; it drifts on long
+  // pauses, so cap it just under the estimated runtime so it never reads as
+  // "complete". ani.pm switches this off the moment its events arrive.
+  useEffect(() => {
+    if (!extEmbed) return;
+    const id = setInterval(() => {
+      if (extEmbed.provider === 'anipm' && anipmApiSeenRef.current) return; // precise tracking active
+      const w = embedWallRef.current;
+      if (!w) return;
+      const now = Date.now();
+      if (document.visibilityState !== 'visible') {
+        w.last = now; // don't accumulate while the tab is hidden
+        return;
+      }
+      const step = Math.min((now - w.last) / 1000, 15); // guard against throttled timers
+      w.last = now;
+      const est = extEstDurRef.current;
+      w.base = est > 0 ? Math.min(w.base + step, est * 0.97) : w.base + step;
+      if (w.base > 3) onProgressRef.current(w.base, est);
+    }, 5000);
+    return () => {
+      clearInterval(id);
+      const w = embedWallRef.current;
+      if (w && w.base > 3 && !(extEmbed.provider === 'anipm' && anipmApiSeenRef.current)) {
+        onProgressRef.current(w.base, extEstDurRef.current); // final flush
+      }
+      embedWallRef.current = null;
+    };
+  }, [extEmbed]);
 
   // ── Resolve stream chain (Provider 1 → 2 → 3) ─────────────────────────────
   useEffect(() => {
@@ -809,6 +957,7 @@ export default function Player({
       {extEmbed && (
         <>
           <iframe
+            ref={anipmFrameRef}
             src={extEmbed.url}
             className="absolute inset-0 z-0 h-full w-full border-0 bg-black"
             allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
@@ -1023,6 +1172,19 @@ export default function Player({
         >
           <IconClose size={18} />
         </button>
+      )}
+      {/* ani.pm resume hint — the seek command never got acked (origin policy
+          or API off), so the HD player started at 0. Surface the saved point
+          so the user can drag their own seek bar there. */}
+      {extEmbed?.provider === 'anipm' && !!resumeAt && resumeAt >= 60 && anipmSeekFailed && (
+        <div
+          className={`absolute left-4 top-4 z-20 max-w-[62vw] rounded-full bg-black/65 px-3.5 py-2 text-[11.5px] font-semibold text-white/85 ring-1 ring-white/15 backdrop-blur transition-opacity duration-300 md:left-5 md:top-5 ${
+            showControls || phase !== 'playing' ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
+        >
+          <span className="text-[var(--aj-acc-hi)]">Resume ≈ {fmtTime(resumeAt)}</span>
+          <span className="font-normal text-white/55"> — seek there in the player</span>
+        </div>
       )}
 
       {/* ── Bottom controls (Ajest-native for ALL sources) ── */}
