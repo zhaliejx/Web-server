@@ -12,6 +12,7 @@ import { DramaHome, dramaAsCard } from './DramaHome';
 import { DramaDetail } from './DramaDetail';
 import { DramaSearchView } from './DramaSearchView';
 import { useDramaHistory } from '@/lib/ajest/dramastore';
+import { purgeExpiredSearches } from '@/lib/ajest/recent';
 import { IconBook, IconTv } from './icons';
 import { HeroCarousel } from './HeroCarousel';
 import { Row, ContinueRow } from './Row';
@@ -130,6 +131,12 @@ export default function AjestApp() {
       navigator.serviceWorker.register('/sw.js').catch(() => undefined);
     }, 1800);
     return () => clearTimeout(t);
+  }, []);
+
+  // Recent-search retention sweep — entries older than 3 days are wiped on
+  // every launch, even if no search view is ever opened this session.
+  useEffect(() => {
+    purgeExpiredSearches();
   }, []);
 
   const openAnime = useCallback((a: AnimeCardType) => {

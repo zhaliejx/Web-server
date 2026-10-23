@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AnimeCard as AnimeCardType } from '@/lib/ajest/types';
 import { fetchSearch } from '@/lib/ajest/client';
+import { recordSearch, getRecentSearches, clearRecentSearches } from '@/lib/ajest/recent';
 import { AnimeCard, CardSkeleton } from './AnimeCard';
+import { RecentSearches } from './RecentSearches';
 import { IconSearch, IconClose, TierBadge, IconInfo } from './icons';
 
 const TIER_COPY: Record<string, string> = {
@@ -24,15 +26,21 @@ export function SearchView({
   const [tier, setTier] = useState<string>('none');
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState('');
+  const [recent, setRecent] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
+    // Defer the localStorage read out of the synchronous effect body
+    const t = setTimeout(() => setRecent(getRecentSearches('anime')), 0);
+    return () => clearTimeout(t);
   }, []);
 
   const run = (q: string) => {
     const trimmed = q.trim();
     if (!trimmed) return;
+    recordSearch('anime', trimmed);
+    setRecent(getRecentSearches('anime'));
     setLoading(true);
     setSearched(trimmed);
     fetchSearch(trimmed)
@@ -133,11 +141,24 @@ export function SearchView({
           )}
         </>
       ) : (
-        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-white/10 bg-[#10131a] py-20 text-white/45">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.05] text-white/30">
-            <IconSearch size={22} />
-          </span>
-          <p className="text-[13px]">Type a title — the cascading engine guarantees zero missing entries.</p>
+        <div className="flex flex-col gap-8">
+          <RecentSearches
+            items={recent}
+            onPick={(q) => {
+              setQuery(q);
+              run(q);
+            }}
+            onClear={() => {
+              clearRecentSearches();
+              setRecent([]);
+            }}
+          />
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-white/10 bg-[#10131a] py-20 text-white/45">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.05] text-white/30">
+              <IconSearch size={22} />
+            </span>
+            <p className="text-[13px]">Type a title — the cascading engine guarantees zero missing entries.</p>
+          </div>
         </div>
       )}
     </div>

@@ -6,7 +6,9 @@ import { useEffect, useRef, useState } from 'react';
 import type { MangaItem } from '@/lib/ajest/types';
 import { fetchMangaSearch } from '@/lib/ajest/manga';
 import { enabledMangaSources } from '@/lib/ajest/prefs';
+import { recordSearch, getRecentSearches, clearRecentSearches } from '@/lib/ajest/recent';
 import { MangaCard, MangaCardSkeleton } from './MangaCard';
+import { RecentSearches } from './RecentSearches';
 import { IconSearch, IconLoader, IconBook } from './icons';
 
 interface Props {
@@ -18,11 +20,15 @@ export function MangaSearchView({ onOpen }: Props) {
   const [results, setResults] = useState<MangaItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [recent, setRecent] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Autofocus like the anime search view
   useEffect(() => {
     inputRef.current?.focus();
+    // Defer the localStorage read out of the synchronous effect body
+    const t = setTimeout(() => setRecent(getRecentSearches('manga')), 0);
+    return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {
@@ -43,6 +49,8 @@ export function MangaSearchView({ onOpen }: Props) {
         .finally(() => {
           setLoading(false);
           setSearched(true);
+          recordSearch('manga', q);
+          setRecent(getRecentSearches('manga'));
         });
     }, q ? 420 : 0);
     return () => clearTimeout(t);
@@ -96,7 +104,18 @@ export function MangaSearchView({ onOpen }: Props) {
             <p className="text-sm">Nothing matched “{query.trim()}”</p>
             <p className="text-xs text-white/30">Try the original title or a shorter phrase.</p>
           </div>
-        ) : null}
+        ) : (
+          <div className="flex flex-col gap-8 py-4">
+            <RecentSearches
+              items={recent}
+              onPick={(q) => setQuery(q)}
+              onClear={() => {
+                clearRecentSearches();
+                setRecent([]);
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

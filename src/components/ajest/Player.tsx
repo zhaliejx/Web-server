@@ -204,11 +204,19 @@ export default function Player({
   const extProviderRef = useRef('');
   const [anipmSeekFailed, setAnipmSeekFailed] = useState(false);
   // True when no partner-API event ever arrives (API off / origin policy
-  // change). The fully-shielded frame would then be uncontrollable, so the
-  // shield degrades to the legacy bottom-strip passthrough (their native
-  // controls) — interaction-driven ads become possible again only in that
-  // degraded mode.
+  // change). The frame stays FULLY sealed — there is no interactive
+  // passthrough anymore (that would re-open their click-driven ad layer).
+  // If other providers exist we fail over automatically; only on the last
+  // source does this flag stick, keeping the video running sealed while the
+  // wall-clock tracker keeps watch-time. Their pixels never show: the
+  // video-window mask below is independent of API state.
   const [anipmApiDead, setAnipmApiDead] = useState(false);
+  // True once their embed reported real playback (timeupdate past 3s).
+  // Errors that arrive before ANY playback are treated as fatal — their
+  // error screens otherwise linger sealed-but-visible inside the frame.
+  const anipmPlayedRef = useRef(false);
+  // Live size of the player shell — drives the video-window mask geometry.
+  const [shellSize, setShellSize] = useState({ w: 0, h: 0 });
   // Latest playback clock mirror — seekBy/seekTo post commands from closures
   // that never see fresh state.
   const anipmTimeRef = useRef({ t: 0, d: 0 });
@@ -361,8 +369,11 @@ export default function Player({
     // refuse to start. All playback control rides their postMessage partner
     // API (play/pause/seek/volume/rate commands; timeupdate/play/pause/
     // ended events) — watch-time tracking and auto-resume included. If the
-    // API never wakes, anipmApiDead degrades to the legacy bottom-strip
-    // passthrough so their native controls remain usable.
+    // API never wakes the frame is NEVER made interactive again — it fails
+    // over to the next provider (or, on the last source, keeps playing
+    // sealed with wall-clock tracking). Their pixels are additionally
+    // confined to the video rectangle by the video-window mask (their own
+    // navigation/chrome can never show — see the render section).
     if (src.url.startsWith('embed:')) {
       const embedUrl = src.url.slice('embed:'.length);
       setYtEmbed(null);
@@ -374,6 +385,7 @@ export default function Player({
       anipmSeekOkRef.current = false;
       anipmPausedRef.current = false;
       anipmErrHandledRef.current = false;
+      anipmPlayedRef.current = false;
       anipmTimeRef.current = { t: 0, d: 0 };
       setAnipmSeekFailed(false);
       setAnipmApiDead(false);
@@ -403,11 +415,18 @@ export default function Player({
           }, delay);
         }
         // Fail-safe: if their partner API never emits (API off / origin
-        // policy change), a fully-shielded frame is uncontrollable — degrade
-        // to the legacy bottom-strip passthrough (their native controls).
+        // policy change), a fully-shielded frame is uncontrollable. NEVER
+        // degrade to an interactive passthrough — their controls are the ad
+        // vector we sealed in the first place. Fail over to the next
+        // provider instead; on the last source, keep the video running
+        // sealed (wall-clock tracking keeps watch-time) and say so.
         setTimeout(() => {
-          if (activeEmbedUrlRef.current === embedUrl && !anipmApiSeenRef.current) {
+          if (activeEmbedUrlRef.current !== embedUrl || anipmApiSeenRef.current) return;
+          if (srcIdxRef.current < sourcesRef.current.length - 1) {
+            extNextRef.current?.();
+          } else {
             setAnipmApiDead(true);
+            setFallbackNote('HD player is running without remote control — playback continues.');
           }
         }, 7000);
         // Auto-resume via the partner API — a seek sent before playback starts
@@ -551,6 +570,35 @@ export default function Player({
     attachRef.current = attachSource;
   }, [attachSource]);
 
+  // ── ani.pm video-window mask geometry ─────────────────────────────────────
+  // Their embed always renders its own chrome: player controls, an episode
+  // list drawer, poster/error screens — and on mobile their whole site UI
+  // (bottom tab navigation) when their shell ever lands on a site page
+  // (nonce-expiry reloads hit a 404 on their /embed/v1 route; top-level
+  // opens 302 to their site). Cross-origin CSS injection is impossible and
+  // no partner command hides their UI — so we hide it GEOMETRICALLY: opaque
+  // bars cover everything outside the video rectangle. Their player
+  // letterboxes (contain), so the video always sits inside the window;
+  // everything they render at their viewport edges (navigation, control
+  // bars, drawers, footers) falls in the covered zone and never shows.
+  // Window is 4:3-safe tall / 16:9-safe wide so no plausible aspect clips.
+  useEffect(() => {
+    const el = shellRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect;
+      if (r && r.width > 0 && r.height > 0) {
+        setShellSize((prev) =>
+          Math.round(r.width) === prev.w && Math.round(r.height) === prev.h
+            ? prev
+            : { w: Math.round(r.width), h: Math.round(r.height) }
+        );
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // ── ani.pm partner API — precise watch-time tracking + resume ack ──────────
   useEffect(() => {
     if (extEmbed?.provider !== 'anipm') return;
@@ -592,6 +640,7 @@ export default function Player({
         const paused = !!d.data?.paused;
         anipmPausedRef.current = paused;
         anipmTimeRef.current = { t, d: dur };
+        if (t > 3) anipmPlayedRef.current = true;
         setPlaying(!paused);
         if (!paused && t > 3) {
           const nowTs = Date.now();
@@ -621,10 +670,16 @@ export default function Player({
         onProgressRef.current(dur, dur); // mark complete
         if (hasNextRef.current) onNextRef.current(); // auto-next episode
       } else if (d.event === 'error') {
-        // Their terminal errors render inside the (shielded) frame — surface
-        // them by failing over to the next provider instead.
+        // Their error screens render inside the (shielded) frame — surface
+        // them by failing over to the next provider instead. Fatal codes
+        // always switch; ANY error before real playback started also
+        // switches (their transient error states would otherwise linger
+        // visible inside the sealed frame with no way to dismiss them).
         const code = typeof d.data?.code === 'string' ? d.data.code : '';
-        if (code && ANIPM_FATAL_ERRORS.has(code) && !anipmErrHandledRef.current) {
+        if (
+          !anipmErrHandledRef.current &&
+          ((code && ANIPM_FATAL_ERRORS.has(code)) || !anipmPlayedRef.current)
+        ) {
           anipmErrHandledRef.current = true;
           extNextRef.current?.();
         }
@@ -1091,22 +1146,53 @@ export default function Player({
             referrerPolicy="origin"
             title={`Ajest — ${providerLabel(extEmbed.provider)}`}
           />
-          {/* ani.pm ad shield — FULL coverage. Their embed ships a click-catcher
-              pop-under layer (embed.settlar.io/ad/pop) that goes click-through
-              on a cooldown and fires an ad on the next tap anywhere in their
-              document. With zero clicks reaching their document: the catcher
-              can never arm, their frame never gains user activation, so
-              Chrome blocks their cross-origin top-frame redirect and popup
-              attempts at the browser level. Playback control rides the
-              partner API instead of their UI; mousemove still wakes the Ajest
-              chrome. If their API never wakes (anipmApiDead), the shield
-              degrades to the legacy bottom-strip passthrough so their native
-              controls stay usable (interaction-driven ads become possible
-              again only in that degraded mode). */}
+          {/* ani.pm ad shield — FULL coverage, ALWAYS. Their embed ships a
+              click-catcher pop-under layer (embed.settlar.io/ad/pop) that
+              goes click-through on a cooldown and fires an ad on the next
+              tap anywhere in their document. With zero clicks reaching their
+              document: the catcher can never arm, their frame never gains
+              user activation, so Chrome blocks their cross-origin top-frame
+              redirect and popup attempts at the browser level. Playback
+              control rides the partner API instead of their UI; mousemove
+              still wakes the Ajest chrome. No passthrough exists in any
+              state — an API-less frame fails over (or runs sealed), it is
+              never made tappable. */}
+          {/* ani.pm video-window mask — opaque bars over everything outside
+              the video rectangle (geometry above). Their navigation, bottom
+              tab bar, control bars, episode drawer and site pages can never
+              show; only their letterboxed video is visible through the
+              window. Re-rendered per shellSize so rotation/fullscreen stay
+              exact. */}
+          {extEmbed.provider === 'anipm' && shellSize.w > 0 && shellSize.h > 0 && (
+            <>
+              {(() => {
+                const winW = Math.min(shellSize.w, (shellSize.h * 16) / 9);
+                const winH = Math.min(shellSize.h, (shellSize.w * 3) / 4);
+                const vPad = Math.max(0, (shellSize.h - winH) / 2);
+                const sideW = Math.max(0, (shellSize.w - winW) / 2);
+                const bar = 'pointer-events-none absolute z-[6] bg-black';
+                return (
+                  <>
+                    {vPad > 0 && (
+                      <>
+                        <div aria-hidden className={`${bar} inset-x-0 top-0`} style={{ height: vPad }} />
+                        <div aria-hidden className={`${bar} inset-x-0 bottom-0`} style={{ height: vPad }} />
+                      </>
+                    )}
+                    {sideW > 0 && (
+                      <>
+                        <div aria-hidden className={`${bar} inset-y-0 left-0`} style={{ width: sideW }} />
+                        <div aria-hidden className={`${bar} inset-y-0 right-0`} style={{ width: sideW }} />
+                      </>
+                    )}
+                  </>
+                );
+              })()}
+            </>
+          )}
           {extEmbed.provider === 'anipm' && (
             <div
               className="absolute inset-0 z-10 cursor-pointer"
-              style={anipmApiDead ? { bottom: 96 } : undefined}
               onMouseMove={bumpControls}
               onClick={togglePlay}
               aria-hidden="true"
@@ -1303,12 +1389,14 @@ export default function Player({
       )}
 
       {/* ── Bottom controls (Ajest-native for ALL sources) ──
-          ani.pm: visible too — every control posts into the partner API
-          (play/pause/seek/volume/rate). Hidden only when the ani.pm API is
-          dead (their native controls take over) or for other embeds. */}
+          ani.pm: always visible — every control posts into the partner API
+          (play/pause/seek/volume/rate). There is no passthrough mode anymore:
+          even with their API dead the frame stays sealed and these controls
+          remain the only chrome (best-effort). Hidden for other embeds,
+          which keep their own interactive controls. */}
       <div
         className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-4 pb-3 pt-10 md:px-6 transition-opacity duration-300 ${
-          extEmbed && (extEmbed.provider !== 'anipm' || anipmApiDead)
+          extEmbed && extEmbed.provider !== 'anipm'
             ? 'hidden'
             : showControls || phase !== 'playing'
               ? 'opacity-100'

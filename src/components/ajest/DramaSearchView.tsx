@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AnimeCard as AnimeCardType, DramaItem } from '@/lib/ajest/types';
 import { fetchDramaSearch } from '@/lib/ajest/client';
+import { recordSearch, getRecentSearches, clearRecentSearches } from '@/lib/ajest/recent';
 import { AnimeCard } from './AnimeCard';
+import { RecentSearches } from './RecentSearches';
 import { IconLoader, IconSearch } from './icons';
 import { dramaAsCard } from './DramaHome';
 
@@ -14,7 +16,14 @@ export function DramaSearchView({ onOpen }: { onOpen: (d: DramaItem) => void }) 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
+  const [recent, setRecent] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    // Defer the localStorage read out of the synchronous effect body
+    const t = setTimeout(() => setRecent(getRecentSearches('drama')), 0);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     const q = query.trim();
@@ -36,6 +45,10 @@ export function DramaSearchView({ onOpen }: { onOpen: (d: DramaItem) => void }) 
           setResults(d.results || []);
           setSearched(true);
           setError(d.ok === false ? (d as { error?: string }).error || 'Search failed' : null);
+          if (d.ok !== false) {
+            recordSearch('drama', q);
+            setRecent(getRecentSearches('drama'));
+          }
         })
         .catch(() => !ctrl.signal.aborted && setError('Could not reach the drama search'))
         .finally(() => !ctrl.signal.aborted && setLoading(false));
@@ -81,9 +94,19 @@ export function DramaSearchView({ onOpen }: { onOpen: (d: DramaItem) => void }) 
       )}
 
       {!searched && !loading && (
-        <p className="mt-14 text-center text-[13px] text-white/35">
-          Type at least 2 characters — results come from the Dramacool tier.
-        </p>
+        <div className="mt-10 flex flex-col gap-8">
+          <RecentSearches
+            items={recent}
+            onPick={(q) => setQuery(q)}
+            onClear={() => {
+              clearRecentSearches();
+              setRecent([]);
+            }}
+          />
+          <p className="text-center text-[13px] text-white/35">
+            Type at least 2 characters — results come from the Dramacool tier.
+          </p>
+        </div>
       )}
     </div>
   );
