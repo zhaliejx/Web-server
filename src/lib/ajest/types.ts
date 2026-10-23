@@ -137,3 +137,60 @@ export interface MangaHistoryEntry {
   pages: number;
   updatedAt: number;
 }
+
+// ── Dramas (K-drama / C-drama / Asian TV — dramacool tier) ─────────────────
+
+export interface DramaItem {
+  /** dramacool slug — e.g. "queen-of-tears" (namespace prefix added by callers) */
+  slug: string;
+  title: string;
+  cover: string;
+  year?: string;
+  country?: string;
+  status?: string;
+  /** TVSeries | Movie | Anime | Hollywood */
+  type?: string;
+  /** Raw upstream id (debugging only) */
+  siteId?: string;
+  source?: 'dramacool';
+}
+
+export interface DramaEpisode {
+  /** Numeric episode — specials use decimals (16.1, 16.2) */
+  number: number;
+  title?: string;
+  /** Watch-page key, e.g. "episode-16" or "episode-16.1" */
+  epKey: string;
+  durationMin?: number;
+}
+
+export interface DramaDetail {
+  drama: DramaItem;
+  altNames?: string[];
+  description?: string;
+  network?: string;
+  runtime?: string;
+  airsOn?: string;
+  trailerUrl?: string;
+  casts?: string[];
+  genres?: string[];
+  episodes: DramaEpisode[];
+}
+
+export interface DramaStreamsPayload {
+  ok: boolean;
+  /** Ordered fallback chain — same VideoSource shape as anime streams */
+  sources: VideoSource[];
+  providersTried: { provider: string; ok: boolean; error?: string }[];
+  episodeTitle?: string;
+}
+
+export interface DramaHistoryEntry {
+  drama: DramaItem;
+  episode: { number: number; title?: string };
+  /** Seconds watched */
+  progress: number;
+  /** Episode length in seconds (0 if unknown) */
+  durationSec: number;
+  updatedAt: number;
+}

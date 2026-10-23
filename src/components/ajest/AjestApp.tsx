@@ -1,13 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { AnimeCard as AnimeCardType, MangaChapter, MangaItem } from '@/lib/ajest/types';
-import { fetchCatalog } from '@/lib/ajest/client';
+import type { AnimeCard as AnimeCardType, MangaChapter, MangaItem, DramaItem } from '@/lib/ajest/types';
+import { fetchCatalog, fetchDramaDetail } from '@/lib/ajest/client';
 import { MangaHome } from './MangaHome';
 import { MangaDetail } from './MangaDetail';
 import { MangaReader } from './MangaReader';
 import { MangaSearchView } from './MangaSearchView';
 import { MangaLibrary } from './MangaLibrary';
+import { DramaHome, dramaAsCard } from './DramaHome';
+import { DramaDetail } from './DramaDetail';
+import { DramaSearchView } from './DramaSearchView';
+import { useDramaHistory } from '@/lib/ajest/dramastore';
 import { IconBook, IconTv } from './icons';
 import { HeroCarousel } from './HeroCarousel';
 import { Row, ContinueRow } from './Row';
@@ -34,7 +38,7 @@ import {
 import { useHistory, useLiked, useWatchLater } from '@/lib/ajest/store';
 import { fetchDetail } from '@/lib/ajest/client';
 
-type Medium = 'anime' | 'manga';
+type Medium = 'anime' | 'manga' | 'drama';
 
 type View =
   | { kind: 'home' }
@@ -47,7 +51,10 @@ type View =
   | { kind: 'manga-home' }
   | { kind: 'manga-search' }
   | { kind: 'manga-library' }
-  | { kind: 'manga-detail'; manga: MangaItem };
+  | { kind: 'manga-detail'; manga: MangaItem }
+  | { kind: 'drama-home' }
+  | { kind: 'drama-search' }
+  | { kind: 'drama-detail'; drama: DramaItem };
 
 interface PlayIntent {
   anime: AnimeCardType;
@@ -60,6 +67,11 @@ interface ReaderIntent {
   resumePage: number;
 }
 
+interface DramaIntent {
+  drama: DramaItem;
+  episode: number;
+}
+
 // ── AjestApp — main shell ────────────────────────────────────────────────────
 // Rendered client-only via dynamic(ssr:false), so localStorage is safe.
 
@@ -67,12 +79,14 @@ export default function AjestApp() {
   const [view, setView] = useState<View>({ kind: 'home' });
   // Medium switch — one app, two libraries. Persisted; manga mode swaps the
   // whole nav stack, home rails and search target.
-  const [medium, setMedium] = useState<Medium>(() =>
-    typeof window !== 'undefined' && window.localStorage.getItem('ajest.medium.v1') === 'manga'
-      ? 'manga'
-      : 'anime'
-  );
+  const [medium, setMedium] = useState<Medium>(() => {
+    if (typeof window === 'undefined') return 'anime';
+    const v = window.localStorage.getItem('ajest.medium.v1');
+    return v === 'manga' || v === 'drama' ? v : 'anime';
+  });
   const [readerIntent, setReaderIntent] = useState<ReaderIntent | null>(null);
+  const [dramaIntent, setDramaIntent] = useState<DramaIntent | null>(null);
+  const [dramaEpisodes, setDramaEpisodes] = useState<{ number: number; title?: string }[]>([]);
   const [catalog, setCatalog] = useState<Record<string, AnimeCardType[]>>({});
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -82,6 +96,8 @@ export default function AjestApp() {
 
   const upsertHistory = useHistory((s) => s.upsert);
   const historyEntries = useHistory((s) => s.entries);
+  const upsertDramaHistory = useDramaHistory((s) => s.upsert);
+  const dramaHistoryEntries = useDramaHistory((s) => s.entries);
 
   // Load home catalog immediately — no bootup screen, content right away
   useEffect(() => {
@@ -122,7 +138,7 @@ export default function AjestApp() {
   }, []);
 
   const goHome = useCallback(() => {
-    setView(medium === 'manga' ? { kind: 'manga-home' } : { kind: 'home' });
+    setView(medium === 'manga' ? { kind: 'manga-home' } : medium === 'drama' ? { kind: 'drama-home' } : { kind: 'home' });
     window.scrollTo({ top: 0 });
   }, [medium]);
 
@@ -140,7 +156,7 @@ export default function AjestApp() {
       /* storage unavailable — session-only */
     }
     setReaderIntent(null);
-    setView(m === 'manga' ? { kind: 'manga-home' } : { kind: 'home' });
+    setView(m === 'manga' ? { kind: 'manga-home' } : m === 'drama' ? { kind: 'drama-home' } : { kind: 'home' });
     window.scrollTo({ top: 0 });
   }, []);
 
@@ -152,6 +168,43 @@ export default function AjestApp() {
   const readChapter = useCallback((m: MangaItem, c: MangaChapter, resumePage: number) => {
     setReaderIntent({ manga: m, chapter: c, resumePage });
   }, []);
+
+  const openDrama = useCallback((d: DramaItem) => {
+    setView({ kind: 'drama-detail', drama: d });
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  // Drama play: resolve episode list for next-episode support, then launch player
+  const playDrama = useCallback(
+    (d: DramaItem, episode?: number) => {
+      const saved = dramaHistoryEntries[d.slug];
+      const ep = episode || (saved ? saved.episode.number : 1);
+      setDramaIntent({ drama: d, episode: ep });
+      fetchDramaDetail(d.slug)
+        .then((det) => {
+          if (det.ok) setDramaEpisodes(det.episodes.map((e) => ({ number: e.number, title: e.title })));
+        })
+        .catch(() => undefined);
+    },
+    [dramaHistoryEntries]
+  );
+
+  const saveDramaProgress = useCallback(
+    (progress: number, durationSec: number) => {
+      if (!dramaIntent) return;
+      upsertDramaHistory({
+        drama: dramaIntent.drama,
+        episode: {
+          number: dramaIntent.episode,
+          title: dramaEpisodes.find((e) => e.number === dramaIntent.episode)?.title,
+        },
+        progress,
+        durationSec,
+        updatedAt: Date.now(),
+      });
+    },
+    [dramaIntent, upsertDramaHistory, dramaEpisodes]
+  );
 
   // Play: resolve episode list for next-episode support, then launch player
   const play = useCallback(
@@ -194,16 +247,22 @@ export default function AjestApp() {
           { key: 'manga-search', label: 'Search', icon: <IconSearch size={21} /> },
           { key: 'manga-library', label: 'My Manga', icon: <IconBook size={21} /> },
         ]
-      : [
-          { key: 'home', label: 'Home', icon: <IconHome size={21} /> },
-          { key: 'search', label: 'Search', icon: <IconSearch size={21} /> },
-          { key: 'schedule', label: 'Simulcast', icon: <IconCalendar size={21} /> },
-          { key: 'history', label: 'History', icon: <IconClock size={21} /> },
-          { key: 'liked', label: 'Liked', icon: <IconHeart size={21} /> },
-          { key: 'later', label: 'Watch Later', icon: <IconBookmark size={21} /> },
-        ];
+      : medium === 'drama'
+        ? [
+            { key: 'drama-home', label: 'Home', icon: <IconHome size={21} /> },
+            { key: 'drama-search', label: 'Search', icon: <IconSearch size={21} /> },
+          ]
+        : [
+            { key: 'home', label: 'Home', icon: <IconHome size={21} /> },
+            { key: 'search', label: 'Search', icon: <IconSearch size={21} /> },
+            { key: 'schedule', label: 'Simulcast', icon: <IconCalendar size={21} /> },
+            { key: 'history', label: 'History', icon: <IconClock size={21} /> },
+            { key: 'liked', label: 'Liked', icon: <IconHeart size={21} /> },
+            { key: 'later', label: 'Watch Later', icon: <IconBookmark size={21} /> },
+          ];
 
-  const activeKey = view.kind === 'detail' || view.kind === 'manga-detail' ? null : view.kind;
+  const activeKey =
+    view.kind === 'detail' || view.kind === 'manga-detail' || view.kind === 'drama-detail' ? null : view.kind;
 
   return (
     <div className="aj-fade-in flex min-h-screen flex-col bg-[#0b0d12]">
@@ -255,16 +314,16 @@ export default function AjestApp() {
             <span className="text-[15px] font-extrabold tracking-[0.18em] text-white">AJEST</span>
           </button>
           <span className="hidden items-center gap-1.5 text-[13px] font-bold tracking-[0.22em] text-white/85 md:flex">
-            <IconSparkle size={14} className="text-[var(--aj-acc)]" /> {medium === 'manga' ? 'MANGA, UNBOUND' : 'ANIME, UNBOUND'}
+            <IconSparkle size={14} className="text-[var(--aj-acc)]" /> {medium === 'manga' ? 'MANGA, UNBOUND' : medium === 'drama' ? 'DRAMA, UNBOUND' : 'ANIME, UNBOUND'}
           </span>
           <div className="flex-1" />
           <button
-            onClick={() => nav(medium === 'manga' ? 'manga-search' : 'search')}
+            onClick={() => nav(medium === 'manga' ? 'manga-search' : medium === 'drama' ? 'drama-search' : 'search')}
             className="flex items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-[12.5px] text-white/45 transition hover:border-[var(--aj-acc-40)] hover:text-white/75"
-            aria-label={medium === 'manga' ? 'Search manga' : 'Search anime'}
+            aria-label={medium === 'manga' ? 'Search manga' : medium === 'drama' ? 'Search dramas' : 'Search anime'}
           >
             <IconSearch size={14} />
-            <span className="hidden sm:inline">{medium === 'manga' ? 'Search manga…' : 'Search anime…'}</span>
+            <span className="hidden sm:inline">{medium === 'manga' ? 'Search manga…' : medium === 'drama' ? 'Search dramas…' : 'Search anime…'}</span>
           </button>
           {medium === 'anime' && (
             <button
@@ -274,11 +333,11 @@ export default function AjestApp() {
               <IconGlobe size={13} /> Simulcast
             </button>
           )}
-          {/* ── Anime ⇄ Manga switch (SVG pill) ── */}
+          {/* ── Anime ⇄ Manga ⇄ Dramas switch (SVG pill) ── */}
           <div
             className="flex shrink-0 items-center rounded-full bg-white/[0.06] p-0.5 ring-1 ring-white/10"
             role="tablist"
-            aria-label="Switch between anime and manga"
+            aria-label="Switch between anime, manga and dramas"
           >
             <button
               role="tab"
@@ -307,6 +366,20 @@ export default function AjestApp() {
             >
               <IconBook size={13} />
               <span className="hidden sm:inline">Manga</span>
+            </button>
+            <button
+              role="tab"
+              aria-selected={medium === 'drama'}
+              onClick={() => switchMedium('drama')}
+              title="K-drama & Asian drama mode"
+              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11.5px] font-bold transition sm:px-3 ${
+                medium === 'drama'
+                  ? 'bg-[var(--aj-acc)] text-black shadow'
+                  : 'text-white/55 hover:text-white'
+              }`}
+            >
+              <IconFilm size={13} />
+              <span className="hidden sm:inline">Dramas</span>
             </button>
           </div>
           <AppControls />
@@ -370,6 +443,17 @@ export default function AjestApp() {
         {medium === 'manga' && view.kind === 'manga-detail' && (
           <MangaDetail manga={view.manga} onBack={goHome} onRead={readChapter} />
         )}
+
+        {/* ── K-drama / Asian drama (dramacool tier) ── */}
+        {medium === 'drama' && view.kind === 'drama-home' && (
+          <div className="mx-auto max-w-7xl md:px-8">
+            <DramaHome onOpen={openDrama} onPlay={playDrama} />
+          </div>
+        )}
+        {medium === 'drama' && view.kind === 'drama-search' && <DramaSearchView onOpen={openDrama} />}
+        {medium === 'drama' && view.kind === 'drama-detail' && (
+          <DramaDetail drama={view.drama} onBack={goHome} onPlay={playDrama} />
+        )}
       </main>
 
       {/* ── Mobile bottom nav ── */}
@@ -421,6 +505,30 @@ export default function AjestApp() {
           resumePage={readerIntent.resumePage}
           onClose={() => setReaderIntent(null)}
           onNav={(c) => setReaderIntent({ manga: readerIntent.manga, chapter: c, resumePage: 0 })}
+        />
+      )}
+
+      {/* ── Drama player overlay (direct HLS + mirror embeds, watch-time aware) ── */}
+      {dramaIntent && (
+        <Player
+          key={`dc:${dramaIntent.drama.slug}:${dramaIntent.episode}`}
+          anime={dramaAsCard(dramaIntent.drama)}
+          dramaSlug={dramaIntent.drama.slug}
+          episode={dramaIntent.episode}
+          episodeTitle={dramaEpisodes.find((e) => e.number === dramaIntent.episode)?.title}
+          resumeAt={
+            dramaHistoryEntries[dramaIntent.drama.slug]?.episode.number === dramaIntent.episode
+              ? dramaHistoryEntries[dramaIntent.drama.slug]?.progress
+              : undefined
+          }
+          hasNext={dramaEpisodes.some((e) => e.number > dramaIntent.episode)}
+          onClose={() => setDramaIntent(null)}
+          onNextEpisode={() => {
+            if (!dramaIntent) return;
+            const next = dramaEpisodes.map((e) => e.number).filter((n) => n > dramaIntent.episode).sort((a, b) => a - b)[0];
+            setDramaIntent({ ...dramaIntent, episode: next ?? dramaIntent.episode + 1 });
+          }}
+          onProgress={saveDramaProgress}
         />
       )}
     </div>

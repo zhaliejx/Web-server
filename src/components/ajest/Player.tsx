@@ -20,11 +20,13 @@ import {
   IconRefresh,
   IconCheck,
 } from './icons';
-import { fetchStreams } from '@/lib/ajest/client';
+import { fetchStreams, fetchDramaStreams } from '@/lib/ajest/client';
 import { useHistory } from '@/lib/ajest/store';
 
 interface PlayerProps {
   anime: AnimeCardType;
+  /** When set, sources resolve through the drama tier (/api/drama/streams) */
+  dramaSlug?: string;
   episode: number;
   episodeTitle?: string;
   resumeAt?: number;
@@ -46,6 +48,8 @@ function providerLabel(p: string): string {
   if (p.startsWith('youtube')) return 'Official source';
   if (p === 'anipm') return 'HD player';
   if (p === 'kaizen') return 'Kaizen mirror';
+  if (p === 'dc-hls') return 'Direct stream';
+  if (p.startsWith('dc-embed')) return 'Mirror player';
   return p;
 }
 
@@ -132,6 +136,7 @@ function fmtTime(sec: number): string {
 
 export default function Player({
   anime,
+  dramaSlug,
   episode,
   episodeTitle,
   resumeAt,
@@ -583,11 +588,12 @@ export default function Player({
       setPhase('resolving');
       setFallbackNote(null);
       setProviders([]);
-      fetchStreams(anime, episode)
+      const load = dramaSlug ? fetchDramaStreams(dramaSlug, episode) : fetchStreams(anime, episode);
+      load
         .then((payload) => {
           if (cancelled) return;
           setProviders(payload.providersTried || []);
-          setOfficialLinks(payload.officialLinks || []);
+          setOfficialLinks((payload as { officialLinks?: typeof officialLinks }).officialLinks || []);
           sourcesRef.current = payload.sources || [];
           if (payload.sources?.length) {
             attachSource(0);
@@ -601,7 +607,7 @@ export default function Player({
       cancelled = true;
       clearTimeout(t);
     };
-  }, [anime.id, episode]);
+  }, [anime.id, dramaSlug, episode]);
 
   // ── Embedded player lifecycle (official IFrame API — reliable events) ──────
   useEffect(() => {
@@ -1080,8 +1086,9 @@ export default function Player({
           <div className="text-center">
             <p className="font-bold text-white">No stream available for this episode</p>
             <p className="mt-1 max-w-md text-xs leading-relaxed text-white/50">
-              The provider chain (gogoanime.by → relay search) could not serve this episode.
-              Recent simulcast episodes are usually hosted; older ones depend on source availability.
+              {dramaSlug
+                ? 'The drama mirror chain could not serve this episode. It may not be hosted yet — try another mirror or episode.'
+                : 'The provider chain (gogoanime.by → relay search) could not serve this episode. Recent simulcast episodes are usually hosted; older ones depend on source availability.'}
             </p>
           </div>
           {officialLinks.length > 0 && (
@@ -1108,11 +1115,12 @@ export default function Player({
             <button
               onClick={() => {
                 setPhase('resolving');
-                fetchStreams(anime, episode)
+                const load = dramaSlug ? fetchDramaStreams(dramaSlug, episode) : fetchStreams(anime, episode);
+                load
                   .then((p) => {
                     sourcesRef.current = p.sources || [];
                     setProviders(p.providersTried || []);
-                    setOfficialLinks(p.officialLinks || []);
+                    setOfficialLinks((p as { officialLinks?: typeof officialLinks }).officialLinks || []);
                     if (p.sources?.length) attachSource(0);
                     else setPhase('error');
                   })

@@ -1,6 +1,6 @@
 'use client';
 
-import type { AnimeCard, DetailPayload, HealthPayload, StreamsPayload } from './types';
+import type { AnimeCard, DetailPayload, DramaDetail, DramaItem, DramaStreamsPayload, HealthPayload, StreamsPayload } from './types';
 import { enabledProviders } from './prefs';
 
 // ── Client fetch helpers (all relative paths through the Next.js gateway) ───
@@ -49,6 +49,28 @@ export async function fetchStreams(anime: Pick<AnimeCard, 'title' | 'titleEnglis
   // Source toggles — disabled tiers are skipped server-side entirely
   p.set('providers', enabledProviders().join(','));
   const r = await fetch(`/api/streams?${p.toString()}`, { cache: 'no-store' });
+  return r.json();
+}
+
+// ── Dramas (K-drama / C-drama tier) ─────────────────────────────────────────
+
+export async function fetchDramaCatalog(): Promise<{ ok?: boolean; sections: { title: string; items: DramaItem[] }[] }> {
+  const r = await fetch('/api/drama/catalog', { cache: 'no-store' });
+  return r.json();
+}
+
+export async function fetchDramaSearch(q: string): Promise<{ ok: boolean; results: DramaItem[] }> {
+  const r = await fetch(`/api/drama/search?q=${encodeURIComponent(q)}`, { cache: 'no-store' });
+  return r.json();
+}
+
+export async function fetchDramaDetail(slug: string): Promise<DramaDetail & { ok: boolean; error?: string }> {
+  const r = await fetch(`/api/drama/detail?slug=${encodeURIComponent(slug)}`, { cache: 'no-store' });
+  return r.json();
+}
+
+export async function fetchDramaStreams(slug: string, episode: number): Promise<DramaStreamsPayload> {
+  const r = await fetch(`/api/drama/streams?slug=${encodeURIComponent(slug)}&episode=${episode}`, { cache: 'no-store' });
   return r.json();
 }
 

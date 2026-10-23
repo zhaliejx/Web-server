@@ -1,8 +1,9 @@
-# Ajest — Anime & Manga, Unbound
+# Ajest — Anime, Manga & Dramas, Unbound
 
-Dark-mode anime streaming + manga/manhwa reading web app: AniList/Kitsu catalog,
+Dark-mode anime streaming + manga/manhwa reading + K-drama/C-drama watching web app: AniList/Kitsu catalog,
 hero carousel, HLS player with a multi-tier provider chain, a four-tier manga
-chain with an embedded MangaFire reader, full SVG icons, watch/reading history,
+chain with an embedded MangaFire reader, a dramacool drama tier with direct
+HLS + mirror fallbacks, full SVG icons, watch/reading history,
 and an honest fallback contract (never hangs, always explains).
 
 Use our official web-app
@@ -93,6 +94,18 @@ Zero-config — `vercel.json` in the repo root pins the correct steps:
   Vercel. ani.pm / kaizen / YouTube and the manga tiers are unaffected —
   ani.pm wins most resolutions anyway.
 
+## Drama chain (K-drama / C-drama / Asian TV)
+
+1. **Direct HLS** — the dramacool SSR worker sometimes pre-resolves the episode to a direct m3u8 (asiaflix hlsproxy); when present it plays immediately via hls.js — straight from your browser, never through our proxy
+2. **Mirror embeds** — every episode carries a dozen-plus hoster embeds (kissasian/dood/vidmoly/streamtape/streamwish/…); the player cycles them in an identity-masked embed layer
+
+Source: the dramacool9 REST family (`dramacool9.rest`, mirror `dramacool.lat`). Its JSON API sits behind
+Cloudflare bot-fight, but every SSR page embeds the API responses it fetched
+(`ng-state` transfer-state) — so the server scrapes the SSR HTML and gets the
+API's JSON in-band. Catalog (6 sections incl. a dedicated K-Dramas row),
+search, series detail and full episode lists all come from the same trick.
+Watch-time resume works here too (localStorage, per series+episode).
+
 ## Companion API
 
 The scraper API (gogo/AnimePahe/Crunchyroll/AnimeKai/MangaDex providers) is a
@@ -106,6 +119,8 @@ The source chains are ordered the way they are on purpose:
 > Anime: **ani.pm → gogo → AnimeKaizen → YouTube**
 >
 > Manga/Manhwa: **MangaFire → MangaPill → MangaRead → MangaDex**
+>
+> Dramas: **Dramacool direct HLS → mirror embeds** (dramacool9.rest → dramacool.lat)
 
 ani.pm plays first because verified AniList-addressed episodes never grab the
 wrong show — the old `gogo → youtube` ordering could let the YouTube tier play
