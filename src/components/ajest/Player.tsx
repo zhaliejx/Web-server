@@ -58,12 +58,20 @@ function providerLabel(p: string): string {
 // verify episodes — but the partner API is CORS-open for browsers. The check
 // runs in the USER'S browser (optimistic: iframe mounts immediately, only
 // verified-missing episodes auto-switch provider).
-const aniPmCache = new Map<number, { at: number; numbers?: Set<number> }>();
-const ANIPM_EP_RE = /^https:\/\/ani\.pm\/embed\/ani\/(\d+)\/(\d+)\/(?:sub|dub)(?:[?#]|$)/;
-async function aniPmEpisodeExists(anilistId: number, episode: number): Promise<boolean | null> {
+const aniPmCache = new Map<
+  number,
+  { at: number; numbers?: Set<number>; dubNumbers?: Set<number> }
+>();
+const ANIPM_EP_RE = /^https:\/\/ani\.pm\/embed\/ani\/(\d+)\/(\d+)\/(sub|dub)(?:[?#]|$)/;
+/** Fetch (and cache) ani.pm's per-episode availability for a series.
+ *  numbers   — episodes with a sub track
+ *  dubNumbers — episodes with a dub track (partner API episodeList[n].available.dub) */
+async function aniPmAvailability(
+  anilistId: number
+): Promise<{ numbers?: Set<number>; dubNumbers?: Set<number> } | null> {
   const hit = aniPmCache.get(anilistId);
   if (hit && Date.now() - hit.at < 600000) {
-    return hit.numbers ? hit.numbers.has(episode) : null;
+    return hit.numbers || hit.dubNumbers ? hit : null;
   }
   try {
     const r = await fetch(`https://ani.pm/api/partner/v1/series/${anilistId}`, { credentials: 'omit' });
@@ -72,9 +80,15 @@ async function aniPmEpisodeExists(anilistId: number, episode: number): Promise<b
     const list = d?.data?.episodeList;
     if (!Array.isArray(list) || !list.length) throw new Error('no episodeList');
     const numbers = new Set<number>();
-    for (const e of list) if (typeof e?.number === 'number') numbers.add(e.number);
-    aniPmCache.set(anilistId, { at: Date.now(), numbers });
-    return numbers.has(episode);
+    const dubNumbers = new Set<number>();
+    for (const e of list) {
+      if (typeof e?.number !== 'number') continue;
+      numbers.add(e.number);
+      if (e?.available?.dub === true) dubNumbers.add(e.number);
+    }
+    const entry = { at: Date.now(), numbers, dubNumbers };
+    aniPmCache.set(anilistId, entry);
+    return entry;
   } catch {
     aniPmCache.set(anilistId, { at: Date.now() }); // fail marker — don't hammer
     return null;
@@ -341,13 +355,32 @@ export default function Player({
       // tracker and the progress bar when the embed can't report real time.
       extEstDurRef.current = Math.max(0, (anime.duration || 0) * 60);
       embedWallRef.current = { base: resumeAtRef.current || 0, last: Date.now() };
-      // ani.pm episodes: verify in-browser; auto-switch only on a confirmed miss
+      // ani.pm episodes: verify in-browser. Dub→sub auto-downgrade when the
+      // partner API reports no dub for this episode; fail over to the next
+      // provider only on a confirmed miss of the requested track entirely.
       if (src.provider === 'anipm') {
         const m = ANIPM_EP_RE.exec(embedUrl);
         if (m) {
-          void aniPmEpisodeExists(Number(m[1]), Number(m[2])).then((exists) => {
-            if (exists === false && activeEmbedUrlRef.current === embedUrl) {
-              extNextRef.current?.();
+          const anilistId = Number(m[1]);
+          const ep = Number(m[2]);
+          const isDub = m[3] === 'dub';
+          void aniPmAvailability(anilistId).then((avail) => {
+            if (!avail || activeEmbedUrlRef.current !== embedUrl) return;
+            const wanted = isDub ? avail.dubNumbers || avail.numbers : avail.numbers;
+            if (wanted && !wanted.has(ep)) {
+              if (isDub && avail.numbers?.has(ep)) {
+                // Episode exists in sub — swap the embed in place instead of
+                // failing over, and say so honestly in the note.
+                const subUrl = embedUrl.replace(/\/dub([?#]|$)/, '/sub$1');
+                activeEmbedUrlRef.current = subUrl;
+                setExtEmbed((cur) =>
+                  cur && cur.url === embedUrl
+                    ? { ...cur, url: subUrl, note: 'Dub not available for this episode — playing sub' }
+                    : cur
+                );
+              } else {
+                extNextRef.current?.();
+              }
             }
           });
         }

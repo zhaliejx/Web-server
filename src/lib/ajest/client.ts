@@ -1,7 +1,7 @@
 'use client';
 
 import type { AnimeCard, DetailPayload, DramaDetail, DramaItem, DramaStreamsPayload, HealthPayload, StreamsPayload } from './types';
-import { enabledProviders } from './prefs';
+import { enabledProviders, loadAudioPref } from './prefs';
 
 // ── Client fetch helpers (all relative paths through the Next.js gateway) ───
 
@@ -36,6 +36,49 @@ export async function fetchSchedule(): Promise<{ ok: boolean; error?: string; it
   return r.json();
 }
 
+// ── Browse (full-catalog filters + sort + paging) ────────────────────────────
+
+export interface BrowsePageInfo {
+  total: number;
+  currentPage: number;
+  lastPage: number;
+  hasNextPage: boolean;
+}
+
+export interface BrowsePayload {
+  ok: boolean;
+  error?: string;
+  items: AnimeCard[];
+  pageInfo: BrowsePageInfo;
+}
+
+export async function fetchBrowse(p: {
+  genres?: string[];
+  tags?: string[];
+  sort?: string;
+  page?: number;
+}): Promise<BrowsePayload> {
+  const q = new URLSearchParams();
+  if (p.genres?.length) q.set('genres', p.genres.join(','));
+  if (p.tags?.length) q.set('tags', p.tags.join(','));
+  q.set('sort', p.sort || 'trending');
+  q.set('page', String(Math.max(1, p.page || 1)));
+  const r = await fetch(`/api/anime/browse?${q.toString()}`, { cache: 'no-store' });
+  return r.json();
+}
+
+// ── New-episode radar (aired counts vs. local history) ──────────────────────
+
+export async function fetchUpdates(
+  ids: string[]
+): Promise<{ ok: boolean; counts: Record<string, number | null> }> {
+  if (!ids.length) return { ok: true, counts: {} };
+  const r = await fetch(`/api/anime/updates?ids=${encodeURIComponent(ids.slice(0, 24).join(','))}`, {
+    cache: 'no-store',
+  });
+  return r.json();
+}
+
 export async function fetchStreams(anime: Pick<AnimeCard, 'title' | 'titleEnglish' | 'titleRomaji' | 'titleNative' | 'anilistId' | 'malId'>, episode: number): Promise<StreamsPayload> {
   const p = new URLSearchParams({
     title: anime.title,
@@ -48,6 +91,8 @@ export async function fetchStreams(anime: Pick<AnimeCard, 'title' | 'titleEnglis
   if (anime.malId) p.set('malId', String(anime.malId));
   // Source toggles — disabled tiers are skipped server-side entirely
   p.set('providers', enabledProviders().join(','));
+  // Audio track preference — drives the ani.pm /sub or /dub embed variant
+  p.set('audio', loadAudioPref());
   const r = await fetch(`/api/streams?${p.toString()}`, { cache: 'no-store' });
   return r.json();
 }

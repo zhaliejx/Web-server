@@ -343,6 +343,27 @@ export const IconBadge = (p: IconProps) => (
   </Svg>
 );
 
+export const IconFilter = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 5h18l-7 8.2V19l-4 2v-7.8z" />
+  </Svg>
+);
+
+export const IconDownload = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3v12" />
+    <path d="m7 10.5 5 4.5 5-4.5" />
+    <path d="M4.5 19.5h15" />
+  </Svg>
+);
+
+export const IconBell = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 9a6 6 0 0 1 12 0c0 5 1.8 6 1.8 6H4.2S6 14 6 9z" />
+    <path d="M10.3 19.5a2 2 0 0 0 3.4 0" />
+  </Svg>
+);
+
 export const IconSatellite = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="12" cy="12" r="2.2" />

@@ -156,12 +156,19 @@ export async function GET(req: Request) {
   //    Player verifies availability from the browser via the CORS-open partner
   //    API (auto-switches to the next tier on a confirmed miss).
   if (bridgedAnilist && enabled.has('anipm')) {
+    // Audio preference rides the client request — ani.pm ships ready-made
+    // /sub and /dub embeds; the Player downgrades dub→sub per episode when
+    // its partner API reports no dub (other tiers are sub-only).
+    const audio = sp.get('audio') === 'dub' ? 'dub' : 'sub';
     sources.push({
       provider: 'anipm',
-      url: `embed:${aniPmEmbedUrl(bridgedAnilist, episode, 'sub')}`,
+      url: `embed:${aniPmEmbedUrl(bridgedAnilist, episode, audio)}`,
       quality: 'auto',
       isM3U8: false,
-      note: 'Full episode · sub (dub switchable in player)',
+      note:
+        audio === 'dub'
+          ? 'Full episode · dub (falls back to sub when unavailable)'
+          : 'Full episode · sub (dub switchable in player)',
     });
   }
 

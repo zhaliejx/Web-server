@@ -5,6 +5,7 @@ import type { AnimeCard as AnimeCardType, HistoryEntry } from '@/lib/ajest/types
 import { AnimeCard } from './AnimeCard';
 import { IconChevronLeft, IconChevronRight } from './icons';
 import { useHistory } from '@/lib/ajest/store';
+import { useNewEpisodeMap } from '@/lib/ajest/radar';
 
 interface RowProps {
   title: string;
@@ -13,10 +14,14 @@ interface RowProps {
   badge?: string;
   icon?: React.ReactNode;
   subtitle?: string;
+  /** Renders a "See all" pill that opens the full filtered listing */
+  onSeeAll?: () => void;
+  /** Per-title new-episode counts — renders a "+N NEW" pill over the poster */
+  newEps?: Record<string, number>;
 }
 
 // Horizontal responsive content rail with SVG scroll arrows
-export function Row({ title, items, onOpen, badge, icon, subtitle }: RowProps) {
+export function Row({ title, items, onOpen, badge, icon, subtitle, onSeeAll, newEps }: RowProps) {
   const railRef = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
@@ -55,23 +60,34 @@ export function Row({ title, items, onOpen, badge, icon, subtitle }: RowProps) {
           <h2 className="text-[17px] md:text-xl font-bold tracking-tight text-white/95">{title}</h2>
           {subtitle && <span className="hidden md:inline text-xs text-white/35 pb-0.5">{subtitle}</span>}
         </div>
-        <div className="hidden md:flex items-center gap-1.5 opacity-0 transition-opacity group-hover/row:opacity-100">
-          <button
-            onClick={() => scrollBy(-1)}
-            disabled={!canLeft}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.07] text-white/80 transition hover:bg-[var(--aj-acc)] hover:text-black disabled:opacity-25 disabled:hover:bg-white/[0.07] disabled:hover:text-white/80"
-            aria-label={`Scroll ${title} left`}
-          >
-            <IconChevronLeft size={16} />
-          </button>
-          <button
-            onClick={() => scrollBy(1)}
-            disabled={!canRight}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.07] text-white/80 transition hover:bg-[var(--aj-acc)] hover:text-black disabled:opacity-25 disabled:hover:bg-white/[0.07] disabled:hover:text-white/80"
-            aria-label={`Scroll ${title} right`}
-          >
-            <IconChevronRight size={16} />
-          </button>
+        <div className="flex items-center gap-1.5">
+          {onSeeAll && (
+            <button
+              onClick={onSeeAll}
+              className="rounded-full bg-white/[0.06] px-3 py-1.5 text-[11.5px] font-bold text-white/65 ring-1 ring-white/10 transition hover:bg-[var(--aj-acc)] hover:text-black hover:ring-[var(--aj-acc)]"
+              aria-label={`See all ${title}`}
+            >
+              See all
+            </button>
+          )}
+          <div className="hidden items-center gap-1.5 opacity-0 transition-opacity group-hover/row:opacity-100 md:flex">
+            <button
+              onClick={() => scrollBy(-1)}
+              disabled={!canLeft}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.07] text-white/80 transition hover:bg-[var(--aj-acc)] hover:text-black disabled:opacity-25 disabled:hover:bg-white/[0.07] disabled:hover:text-white/80"
+              aria-label={`Scroll ${title} left`}
+            >
+              <IconChevronLeft size={16} />
+            </button>
+            <button
+              onClick={() => scrollBy(1)}
+              disabled={!canRight}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.07] text-white/80 transition hover:bg-[var(--aj-acc)] hover:text-black disabled:opacity-25 disabled:hover:bg-white/[0.07] disabled:hover:text-white/80"
+              aria-label={`Scroll ${title} right`}
+            >
+              <IconChevronRight size={16} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -79,23 +95,26 @@ export function Row({ title, items, onOpen, badge, icon, subtitle }: RowProps) {
         ref={railRef}
         className="no-scrollbar flex snap-x snap-mandatory gap-3.5 overflow-x-auto px-4 pb-3 md:gap-4 md:px-8"
       >
-        {items.map((a) => (
-          <div key={a.id} className="w-[46vw] shrink-0 snap-start sm:w-[30vw] md:w-[21vw] lg:w-[15.5vw] xl:w-[12.5vw]">
-            <AnimeCard anime={a} onOpen={onOpen} badge={badge} />
-          </div>
-        ))}
+        {items.map((a) => {
+          const fresh = newEps?.[a.id];
+          return (
+            <div key={a.id} className="w-[46vw] shrink-0 snap-start sm:w-[30vw] md:w-[21vw] lg:w-[15.5vw] xl:w-[12.5vw]">
+              <AnimeCard anime={a} onOpen={onOpen} badge={badge || (fresh ? `+${fresh} NEW` : undefined)} />
+            </div>
+          );
+        })}
       </div>
     </section>
   );
 }
 
-// ── Continue Watching rail — History with resume progress ───────────────────
+// ── Continue Watching rail — History with resume progress + new-ep radar ────
 export function ContinueRow({ onOpen }: { onOpen: (a: AnimeCardType) => void }) {
   const entries = useHistory((s) => s.entries);
-  const items = Object.values(entries)
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, 14)
-    .map((e) => e.anime);
+  const sorted = Object.values(entries).sort((a, b) => b.updatedAt - a.updatedAt);
+  const recent = sorted.slice(0, 14);
+  const items = recent.map((e) => e.anime);
+  const newEps = useNewEpisodeMap(recent);
 
   if (!items.length) return null;
   return (
@@ -103,6 +122,7 @@ export function ContinueRow({ onOpen }: { onOpen: (a: AnimeCardType) => void }) 
       title="Continue Watching"
       subtitle="Picks up where you left off"
       items={items}
+      newEps={newEps}
       onOpen={onOpen}
       icon={
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

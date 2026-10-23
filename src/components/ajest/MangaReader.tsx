@@ -13,7 +13,13 @@ import { fetchMangaChapters, fetchMangaPages } from '@/lib/ajest/manga';
 import { useMangaHistory } from '@/lib/ajest/mangastore';
 import { useMangaSourcePrefs } from '@/lib/ajest/prefs';
 import { MangaFireEmbed } from './MangaFireEmbed';
-import { IconChevronLeft, IconChevronRight, IconClose, IconLoader, IconAlert, IconBook } from './icons';
+import { IconChevronLeft, IconChevronRight, IconClose, IconLoader, IconAlert, IconBook, IconDownload, IconCheck, IconTrash } from './icons';
+import {
+  downloadChapter,
+  getChapter,
+  deleteChapter,
+  isOnline,
+} from '@/lib/ajest/mangadl';
 
 interface Props {
   manga: MangaItem;
@@ -29,16 +35,24 @@ export function MangaReader({ manga, chapter, resumePage = 0, onClose, onNav }: 
   const [error, setError] = useState<string | null>(null);
   const [current, setCurrent] = useState(resumePage);
   const [feed, setFeed] = useState<MangaChapter[] | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [dl, setDl] = useState<{ state: 'idle' | 'busy' | 'saved'; done: number; total: number; bytes?: number; failed?: boolean }>({
+    state: 'idle',
+    done: 0,
+    total: 0,
+  });
   const shellRef = useRef<HTMLDivElement>(null);
   const imgRefs = useRef<(HTMLImageElement | null)[]>([]);
   const tickingRef = useRef(false);
   const resumedRef = useRef(resumePage <= 0);
-
+  const offlineUrlsRef = useRef<string[] | null>(null);
   const upsertHistory = useMangaHistory((s) => s.upsert);
   const mfEnabled = useMangaSourcePrefs().disabled.includes('mangafire') === false;
 
-  // Chapter feed (for prev/next) — server-cached, one cheap request
+  // Chapter feed (for prev/next) — server-cached, one cheap request; skipped
+  // offline (navigation just needs the buttons disabled)
   useEffect(() => {
+    if (!isOnline()) return;
     let cancelled = false;
     fetchMangaChapters(manga.id)
       .then((d) => {
@@ -52,17 +66,59 @@ export function MangaReader({ manga, chapter, resumePage = 0, onClose, onNav }: 
 
   // Page list for the active chapter — the reader remounts per chapter
   // (key={chapter.id} in the parent), so no synchronous state reset is needed.
+  // Cache first (instant + works with no network), network as fallback.
   useEffect(() => {
     let cancelled = false;
-    fetchMangaPages(chapter.id)
-      .then((d) => {
+    offlineUrlsRef.current = null;
+    const finishOffline = (blobs: Blob[], bytes: number) => {
+      const urls = blobs.map((b) => URL.createObjectURL(b));
+      offlineUrlsRef.current = urls;
+      setPages(urls);
+      setOffline(true);
+      setDl({ state: 'saved', done: urls.length, total: urls.length, bytes });
+    };
+    getChapter(chapter.id)
+      .then((rec) => {
         if (cancelled) return;
-        if (d.ok && d.pages.length) setPages(d.pages);
-        else setError('This chapter has no readable pages yet — try another one.');
+        setOffline(false);
+        if (rec?.blobs?.length) {
+          finishOffline(rec.blobs, rec.bytes);
+          return;
+        }
+        if (!isOnline()) {
+          setError('This chapter is not downloaded — go online once (or tap Download) to save it for offline reading.');
+          return;
+        }
+        fetchMangaPages(chapter.id)
+          .then((d) => {
+            if (cancelled) return;
+            if (d.ok && d.pages.length) {
+              setPages(d.pages);
+              setDl({ state: 'idle', done: 0, total: d.pages.length });
+            } else {
+              setError('This chapter has no readable pages yet — try another one.');
+            }
+          })
+          .catch(() => !cancelled && setError('Could not load pages for this chapter.'));
       })
-      .catch(() => !cancelled && setError('Could not load pages for this chapter.'));
+      .catch(() => {
+        // IndexedDB unavailable — behave like the plain online reader
+        if (cancelled || !isOnline()) return;
+        fetchMangaPages(chapter.id)
+          .then((d) => {
+            if (cancelled) return;
+            if (d.ok && d.pages.length) setPages(d.pages);
+            else setError('This chapter has no readable pages yet — try another one.');
+          })
+          .catch(() => !cancelled && setError('Could not load pages for this chapter.'));
+      });
     return () => {
       cancelled = true;
+      // Release any offline object URLs from the chapter we're leaving
+      if (offlineUrlsRef.current) {
+        offlineUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
+        offlineUrlsRef.current = null;
+      }
     };
   }, [chapter.id]);
 
@@ -109,6 +165,51 @@ export function MangaReader({ manga, chapter, resumePage = 0, onClose, onNav }: 
     });
   }, [pages]);
 
+  // ── Offline downloads ──────────────────────────────────────────────────────
+  const startDownload = useCallback(async () => {
+    if (!pages || offlineUrlsRef.current || dl.state === 'busy') return;
+    setDl({ state: 'busy', done: 0, total: pages.length });
+    try {
+      const rec = await downloadChapter(
+        pages,
+        { id: chapter.id, mangaId: manga.id, mangaTitle: manga.title, chapterNumber: chapter.number },
+        (done, total) => setDl({ state: 'busy', done, total }),
+        // A dead CDN node is routable around: re-resolve the chapter's page
+        // list (fresh at-home mirror assignment) and try the new URL.
+        async (i) => {
+          const d = await fetchMangaPages(chapter.id);
+          return d.ok ? d.pages[i] || null : null;
+        }
+      );
+      setDl({ state: 'saved', done: rec.blobs.length, total: rec.blobs.length, bytes: rec.bytes });
+    } catch {
+      setDl({ state: 'idle', done: 0, total: pages.length, failed: true });
+    }
+  }, [pages, chapter, manga, dl.state]);
+
+  const removeDownload = useCallback(async () => {
+    try {
+      await deleteChapter(chapter.id);
+    } catch {
+      /* already gone */
+    }
+    // If we were reading offline blobs, fall back to network pages
+    if (offlineUrlsRef.current) {
+      offlineUrlsRef.current.forEach((u) => URL.revokeObjectURL(u));
+      offlineUrlsRef.current = null;
+      setOffline(false);
+      setPages(null);
+      setError(null);
+      fetchMangaPages(chapter.id)
+        .then((d) => {
+          if (d.ok && d.pages.length) setPages(d.pages);
+          else setError('This chapter has no readable pages yet — try another one.');
+        })
+        .catch(() => setError('Could not load pages for this chapter.'));
+    }
+    setDl({ state: 'idle', done: 0, total: pages?.length || 0 });
+  }, [chapter.id, pages?.length]);
+
   // Feed is newest-first: the next chapter sits one index BEFORE, prev one AFTER
   const chapterIdx = feed ? feed.findIndex((c) => c.id === chapter.id) : -1;
   const prevChapter = chapterIdx >= 0 ? feed![chapterIdx + 1] : undefined;
@@ -152,6 +253,51 @@ export function MangaReader({ manga, chapter, resumePage = 0, onClose, onNav }: 
         {pages && (
           <span className="shrink-0 rounded-full bg-white/[0.07] px-2.5 py-1 text-[11px] font-bold text-white/70">
             {current + 1} / {pages.length}
+          </span>
+        )}
+        {/* Offline download — save the chapter to this device (3-day keep) */}
+        {pages && dl.state === 'idle' && !offline && (
+          <button
+            onClick={startDownload}
+            className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[11px] font-bold transition ${
+              dl.failed
+                ? 'bg-[#e5484d]/15 text-[#ff6b70] ring-1 ring-[#e5484d]/40'
+                : 'bg-white/[0.06] text-white/70 hover:bg-white/[0.14] hover:text-white'
+            }`}
+            aria-label="Download chapter for offline reading"
+            title={dl.failed ? 'Download failed — tap to retry' : 'Download for offline (kept 3 days)'}
+          >
+            <IconDownload size={14} /> <span className="hidden sm:inline">{dl.failed ? 'Retry' : 'Save'}</span>
+          </button>
+        )}
+        {pages && dl.state === 'busy' && (
+          <span
+            className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-[var(--aj-acc)]/15 px-3 text-[11px] font-bold text-[var(--aj-acc-hi)]"
+            role="status"
+          >
+            <IconLoader size={13} className="aj-spin" /> {dl.done}/{dl.total}
+          </span>
+        )}
+        {pages && dl.state === 'saved' && (
+          <span className="flex h-9 shrink-0 items-center gap-1">
+            <span
+              className="flex h-9 items-center gap-1.5 rounded-full bg-[#4ade80]/10 px-3 text-[11px] font-bold text-[#4ade80]"
+              title={offline ? 'Reading from this device' : 'Saved for offline — kept 3 days'}
+            >
+              <IconCheck size={13} /> {dl.bytes ? `${(dl.bytes / 1024 / 1024).toFixed(1)} MB` : 'Saved'}
+            </span>
+            <button
+              onClick={removeDownload}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.06] text-white/60 transition hover:bg-[#e5484d]/20 hover:text-[#ff6b70]"
+              aria-label="Delete downloaded chapter"
+            >
+              <IconTrash size={14} />
+            </button>
+          </span>
+        )}
+        {offline && (
+          <span className="shrink-0 rounded-full bg-[#4ade80]/10 px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-[#4ade80]">
+            Offline
           </span>
         )}
         {mfEnabled && <MangaFireEmbed title={manga.title} compact />}

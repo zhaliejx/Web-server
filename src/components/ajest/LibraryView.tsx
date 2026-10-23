@@ -6,6 +6,7 @@ import { AnimeCard } from './AnimeCard';
 import { IconHeart, IconBookmark, IconClock, IconTrash, IconPlay, IconInfo } from './icons';
 import { useHistory, historySorted, useLiked, useWatchLater } from '@/lib/ajest/store';
 import { fmtProgress } from '@/lib/ajest/client';
+import { useNewEpisodeMap, useAiredCounts, newEpsSince } from '@/lib/ajest/radar';
 
 type LibraryKind = 'history' | 'liked' | 'later';
 
@@ -50,6 +51,12 @@ export function LibraryView({
   const entries = useMemo(() => historySorted(historyEntries), [historyEntries]);
   const count = kind === 'history' ? entries.length : kind === 'liked' ? likedItems.length : laterItems.length;
 
+  // New-episode radar — needs a "last watched" reference, so badges appear on
+  // history rows, and on liked/later cards only for titles also in history.
+  const historyNewEps = useNewEpisodeMap(kind === 'history' ? entries : []);
+  const shelfItems = kind === 'liked' ? likedItems : laterItems;
+  const shelfCounts = useAiredCounts(kind === 'history' ? [] : shelfItems.map((a) => a.id));
+
   return (
     <div className="mx-auto max-w-7xl px-4 pb-24 pt-6 md:px-8">
       <div className="aj-rise mb-8">
@@ -92,6 +99,11 @@ export function LibraryView({
                   <p className="mt-0.5 text-[11.5px] text-white/45">
                     EP {e.episode.number}
                     {e.episode.title ? ` · ${e.episode.title}` : ''}
+                    {historyNewEps[e.anime.id] ? (
+                      <span className="ml-2 rounded-md bg-[var(--aj-acc)] px-1.5 py-0.5 text-[9.5px] font-bold text-black align-[1px]">
+                        +{historyNewEps[e.anime.id]} NEW
+                      </span>
+                    ) : null}
                   </p>
                   <p className="mt-0.5 text-[11px] text-white/35">{fmtProgress(e.progress)}</p>
 
@@ -135,11 +147,15 @@ export function LibraryView({
         </div>
       ) : (
         <div className="grid grid-cols-3 gap-x-3.5 gap-y-6 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-7">
-          {(kind === 'liked' ? likedItems : laterItems).map((a) => (
-            <div key={a.id} className="aj-rise">
-              <AnimeCard anime={a} onOpen={onOpen} />
-            </div>
-          ))}
+          {shelfItems.map((a) => {
+            const watchedEp = historyEntries[a.id]?.episode.number;
+            const fresh = newEpsSince(watchedEp, shelfCounts[a.id]);
+            return (
+              <div key={a.id} className="aj-rise">
+                <AnimeCard anime={a} onOpen={onOpen} badge={fresh ? `+${fresh} NEW` : undefined} />
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

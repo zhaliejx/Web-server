@@ -123,6 +123,56 @@ export function useSourcePrefs(): {
   return { disabled, toggle, reset };
 }
 
+// ── Audio preference (Sub ⇄ Dub) ────────────────────────────────────────────
+// Applies to the ani.pm HD-player tier, whose partner API exposes per-episode
+// sub/dub availability (episodeList[n].available.dub + ready-made /dub embed
+// URLs). Other tiers are sub-only, so dub gracefully degrades: the streams
+// route still returns the full chain, and the Player auto-falls-back to sub
+// per episode when the partner API reports no dub. Default: sub.
+
+export type AudioPref = 'sub' | 'dub';
+
+const AUDIO_LS_KEY = 'ajest.audio.v1';
+
+export function loadAudioPref(): AudioPref {
+  if (typeof window === 'undefined') return 'sub';
+  try {
+    return window.localStorage.getItem(AUDIO_LS_KEY) === 'dub' ? 'dub' : 'sub';
+  } catch {
+    return 'sub';
+  }
+}
+
+export function saveAudioPref(p: AudioPref) {
+  try {
+    window.localStorage.setItem(AUDIO_LS_KEY, p);
+  } catch {
+    /* storage unavailable — session-only */
+  }
+  window.dispatchEvent(new CustomEvent('ajest-audio-changed'));
+}
+
+/** React hook — audio track preference, synced across components. */
+export function useAudioPref(): [AudioPref, (p: AudioPref) => void] {
+  const [pref, setPref] = useState<AudioPref>(() =>
+    typeof window === 'undefined' ? 'sub' : loadAudioPref()
+  );
+  useEffect(() => {
+    const sync = () => setPref(loadAudioPref());
+    window.addEventListener('ajest-audio-changed', sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener('ajest-audio-changed', sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+  const set = useCallback((p: AudioPref) => {
+    saveAudioPref(p);
+    setPref(p);
+  }, []);
+  return [pref, set];
+}
+
 // ── Manga source registry + preferences ─────────────────────────────────────
 // Chain: MangaFire → MangaPill → MangaRead → MangaDex. MangaFire is embed-only
 // (its reader opens in an iframe on the series page), MangaPill/MangaRead are

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AnimeCard as AnimeCardType, MangaChapter, MangaItem, DramaItem } from '@/lib/ajest/types';
-import { fetchCatalog, fetchDramaDetail } from '@/lib/ajest/client';
+import { fetchCatalog, fetchDramaDetail, fetchSchedule } from '@/lib/ajest/client';
 import { MangaHome } from './MangaHome';
 import { MangaDetail } from './MangaDetail';
 import { MangaReader } from './MangaReader';
@@ -13,7 +13,7 @@ import { DramaDetail } from './DramaDetail';
 import { DramaSearchView } from './DramaSearchView';
 import { useDramaHistory } from '@/lib/ajest/dramastore';
 import { purgeExpiredSearches } from '@/lib/ajest/recent';
-import { IconBook, IconTv } from './icons';
+import { IconBook, IconTv, IconBell } from './icons';
 import { HeroCarousel } from './HeroCarousel';
 import { Row, ContinueRow } from './Row';
 import { DetailView } from './DetailView';
@@ -22,6 +22,7 @@ import { ScheduleView } from './ScheduleView';
 import { LibraryView } from './LibraryView';
 import { SearchView } from './SearchView';
 import { AppControls } from './AppControls';
+import { BrowseView, type BrowsePreset } from './BrowseView';
 import {
   AjestMark,
   IconHome,
@@ -45,6 +46,7 @@ type View =
   | { kind: 'home' }
   | { kind: 'search' }
   | { kind: 'schedule' }
+  | { kind: 'browse'; preset?: BrowsePreset }
   | { kind: 'history' }
   | { kind: 'liked' }
   | { kind: 'later' }
@@ -91,6 +93,7 @@ export default function AjestApp() {
   const [catalog, setCatalog] = useState<Record<string, AnimeCardType[]>>({});
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [airingSoon, setAiringSoon] = useState<AnimeCardType[]>([]);
   const [playIntent, setPlayIntent] = useState<PlayIntent | null>(null);
   const [detailEpisodes, setDetailEpisodes] = useState<{ number: number; title?: string }[]>([]);
   const [query, setQuery] = useState('');
@@ -139,6 +142,33 @@ export default function AjestApp() {
     purgeExpiredSearches();
   }, []);
 
+  // Offline-manga retention sweep — downloaded chapters expire after 3 days
+  useEffect(() => {
+    import('@/lib/ajest/mangadl')
+      .then((m) => m.purgeExpiredDownloads())
+      .catch(() => undefined);
+  }, []);
+
+  // New-episode strip — simulcast items airing within the next 24 hours
+  // (server-cached schedule; purely additive, never blocks the home feed)
+  useEffect(() => {
+    let cancelled = false;
+    fetchSchedule()
+      .then((d) => {
+        if (cancelled || !d.ok) return;
+        const nowSec = Date.now() / 1000;
+        const soon = (d.items || [])
+          .filter((a) => a.airingAt && a.airingAt > nowSec - 3600 && a.airingAt < nowSec + 24 * 3600)
+          .sort((a, b) => (a.airingAt || 0) - (b.airingAt || 0))
+          .slice(0, 14);
+        setAiringSoon(soon);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const openAnime = useCallback((a: AnimeCardType) => {
     setView({ kind: 'detail', anime: a });
     window.scrollTo({ top: 0 });
@@ -151,6 +181,12 @@ export default function AjestApp() {
 
   const nav = useCallback((v: View['kind']) => {
     setView({ kind: v } as View);
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  // Browse: full filtered listing — opened from the nav or a rail's "See all"
+  const openBrowse = useCallback((preset?: BrowsePreset) => {
+    setView({ kind: 'browse', preset });
     window.scrollTo({ top: 0 });
   }, []);
 
@@ -261,6 +297,7 @@ export default function AjestApp() {
           ]
         : [
             { key: 'home', label: 'Home', icon: <IconHome size={21} /> },
+            { key: 'browse', label: 'Browse', icon: <IconFlame size={21} /> },
             { key: 'search', label: 'Search', icon: <IconSearch size={21} /> },
             { key: 'schedule', label: 'Simulcast', icon: <IconCalendar size={21} /> },
             { key: 'history', label: 'History', icon: <IconClock size={21} /> },
@@ -400,6 +437,16 @@ export default function AjestApp() {
             <HeroCarousel items={heroItems} onOpen={openAnime} onPlay={(a) => play(a, 1)} />
             <div className="relative z-10 -mt-6 space-y-9 md:space-y-11 pb-24 pt-4">
               <ContinueRow onOpen={openAnime} />
+              {airingSoon.length > 0 && (
+                <Row
+                  title="New Episodes — Next 24 Hours"
+                  subtitle="From the simulcast schedule"
+                  items={airingSoon}
+                  onOpen={openAnime}
+                  icon={<IconBell size={19} />}
+                  onSeeAll={() => nav('schedule')}
+                />
+              )}
               {catalogLoading && !heroItems.length ? (
                 <div className="flex flex-col items-center justify-center gap-3 py-20 text-white/50">
                   <IconLoader size={32} className="aj-spin text-[var(--aj-acc)]" />
@@ -415,13 +462,13 @@ export default function AjestApp() {
                 </div>
               ) : (
                 <>
-                  <Row title="Trending Now" items={catalog.trending || []} onOpen={openAnime} icon={<IconFlame size={19} />} />
-                  <Row title="Popular This Season" items={catalog.seasonal || []} onOpen={openAnime} icon={<IconSparkle size={19} />} />
-                  <Row title="Top Rated of All Time" items={catalog.topRated || []} onOpen={openAnime} badge="TOP" />
-                  <Row title="Action Spotlight" items={catalog.action || []} onOpen={openAnime} />
-                  <Row title="Fantasy Realms" items={catalog.fantasy || []} onOpen={openAnime} />
-                  <Row title="Romance & Drama" items={catalog.romance || []} onOpen={openAnime} />
-                  <Row title="Upcoming Next Season" items={catalog.upcoming || []} onOpen={openAnime} badge="SOON" />
+                  <Row title="Trending Now" items={catalog.trending || []} onOpen={openAnime} icon={<IconFlame size={19} />} onSeeAll={() => openBrowse({ sort: 'trending', title: 'Trending Now' })} />
+                  <Row title="Popular This Season" items={catalog.seasonal || []} onOpen={openAnime} icon={<IconSparkle size={19} />} onSeeAll={() => openBrowse({ sort: 'popular', title: 'Popular This Season' })} />
+                  <Row title="Top Rated of All Time" items={catalog.topRated || []} onOpen={openAnime} badge="TOP" onSeeAll={() => openBrowse({ sort: 'score', title: 'Top Rated of All Time' })} />
+                  <Row title="Action Spotlight" items={catalog.action || []} onOpen={openAnime} onSeeAll={() => openBrowse({ genres: ['Action'], title: 'Action Spotlight' })} />
+                  <Row title="Fantasy Realms" items={catalog.fantasy || []} onOpen={openAnime} onSeeAll={() => openBrowse({ genres: ['Fantasy'], title: 'Fantasy Realms' })} />
+                  <Row title="Romance & Drama" items={catalog.romance || []} onOpen={openAnime} onSeeAll={() => openBrowse({ genres: ['Romance'], title: 'Romance & Drama' })} />
+                  <Row title="Upcoming Next Season" items={catalog.upcoming || []} onOpen={openAnime} badge="SOON" onSeeAll={() => openBrowse({ sort: 'newest', title: 'Newest Releases' })} />
                 </>
               )}
             </div>
@@ -429,6 +476,9 @@ export default function AjestApp() {
         )}
 
         {medium === 'anime' && view.kind === 'search' && <SearchView initialQuery={query} onOpen={openAnime} />}
+        {medium === 'anime' && view.kind === 'browse' && (
+          <BrowseView key={JSON.stringify(view.preset || {})} preset={view.preset} onOpen={openAnime} />
+        )}
         {medium === 'anime' && view.kind === 'schedule' && <ScheduleView onOpen={openAnime} />}
         {medium === 'anime' && view.kind === 'history' && <LibraryView kind="history" onOpen={openAnime} onPlay={(a) => play(a)} />}
         {medium === 'anime' && view.kind === 'liked' && <LibraryView kind="liked" onOpen={openAnime} onPlay={(a) => play(a, 1)} />}

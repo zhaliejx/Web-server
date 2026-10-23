@@ -19,6 +19,7 @@ import {
 import { EpisodeItem, Spinner } from './AnimeCard';
 import { fetchDetail, cleanDescription, fmtDuration } from '@/lib/ajest/client';
 import { useLiked, useWatchLater, useHistory } from '@/lib/ajest/store';
+import { useAudioPref } from '@/lib/ajest/prefs';
 
 interface Props {
   anime: AnimeCardType;
@@ -185,6 +186,9 @@ export function DetailView({ anime, onBack, onPlay, onOpen }: Props) {
               </button>
             </div>
 
+            {/* Audio track — Sub ⇄ Dub (remembered; dub rides the HD player tier) */}
+            <AudioToggle />
+
             {/* Next episode countdown */}
             {merged.nextEpisodeAt && merged.nextEpisodeAt * 1000 > now && (
               <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[var(--aj-acc-25)] bg-[var(--aj-acc)]/[0.06] px-4 py-2 text-[13px] text-[var(--aj-acc-hi)]">
@@ -286,6 +290,41 @@ export function DetailView({ anime, onBack, onPlay, onOpen }: Props) {
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+// ── Sub ⇄ Dub segmented toggle — persisted app-wide, applied on next play ──
+// Dub rides the ani.pm HD-player tier; the Player auto-falls back to sub per
+// episode when their partner API reports no dub track for it.
+function AudioToggle() {
+  const [audio, setAudio] = useAudioPref();
+  return (
+    <div className="mt-4 inline-flex items-center gap-2.5">
+      <div
+        className="flex items-center rounded-full bg-white/[0.06] p-0.5 ring-1 ring-white/10"
+        role="radiogroup"
+        aria-label="Audio track"
+      >
+        {(['sub', 'dub'] as const).map((t) => (
+          <button
+            key={t}
+            role="radio"
+            aria-checked={audio === t}
+            onClick={() => setAudio(t)}
+            className={`rounded-full px-4 py-1.5 text-[12px] font-bold uppercase tracking-wide transition ${
+              audio === t
+                ? 'bg-[var(--aj-acc)] text-black shadow'
+                : 'text-white/55 hover:text-white'
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      <span className="text-[11px] leading-tight text-white/35">
+        {audio === 'dub' ? 'Dub via the HD player · falls back to sub' : 'Subbed on every tier'}
+      </span>
     </div>
   );
 }
