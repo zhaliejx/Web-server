@@ -60,6 +60,8 @@ interface DramaHomeProps {
   onPlay: (d: DramaItem, ep: number) => void;
   /** Deep-link into the Explore view (optionally with a preset) */
   onExplore: (preset?: { country?: string; genre?: string; status?: string; sort?: string; title?: string }) => void;
+  /** Open the Netflix Exclusives catalog */
+  onNetflix: () => void;
 }
 
 /** Country quick-access strip — one tap into a filtered Explore grid. */
@@ -72,7 +74,7 @@ const QUICK_COUNTRIES: { label: string; country: string }[] = [
   { label: 'Taiwan', country: 'Taiwan' },
 ];
 
-export function DramaHome({ onOpen, onPlay, onExplore }: DramaHomeProps) {
+export function DramaHome({ onOpen, onPlay, onExplore, onNetflix }: DramaHomeProps) {
   const [sections, setSections] = useState<{ title: string; items: DramaItem[] }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +127,15 @@ export function DramaHome({ onOpen, onPlay, onExplore }: DramaHomeProps) {
             className="shrink-0 rounded-full border border-white/[0.09] bg-white/[0.04] px-4 py-2 text-[12px] font-bold text-white/70 transition hover:border-[var(--aj-acc-40)] hover:bg-[var(--aj-acc-12)] hover:text-white"
           >
             Ongoing
+          </button>
+          <button
+            onClick={onNetflix}
+            className="flex shrink-0 items-center gap-2 rounded-full border border-[#e50914]/40 bg-[#e50914]/10 px-4 py-2 text-[12px] font-bold text-[#ff6b70] transition hover:border-[#e50914]/70 hover:bg-[#e50914]/20"
+          >
+            <span className="inline-flex h-4 w-4 items-center justify-center rounded-[4px] bg-gradient-to-b from-[#e50914] to-[#7d0009] text-[9px] font-black leading-none text-white">
+              N
+            </span>
+            Netflix Exclusives
           </button>
         </div>
       </section>

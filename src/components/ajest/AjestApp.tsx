@@ -13,6 +13,7 @@ import { DramaHome, dramaAsCard } from './DramaHome';
 import { DramaDetail } from './DramaDetail';
 import { DramaSearchView } from './DramaSearchView';
 import { DramaExploreView, type DramaExplorePreset } from './DramaExploreView';
+import { NetflixCatalogView } from './NetflixCatalogView';
 import { DramaHistoryView } from './DramaHistoryView';
 import { useDramaHistory } from '@/lib/ajest/dramastore';
 import { purgeExpiredSearches } from '@/lib/ajest/recent';
@@ -72,6 +73,7 @@ type View =
   | { kind: 'drama-home' }
   | { kind: 'drama-search' }
   | { kind: 'drama-explore'; preset?: DramaExplorePreset }
+  | { kind: 'drama-netflix' }
   | { kind: 'drama-history' }
   | { kind: 'drama-detail'; drama: DramaItem };
 
@@ -238,6 +240,12 @@ export default function AjestApp() {
   // Drama Explore: full filtered drama listing (country/genre/status + sort)
   const openDramaExplore = useCallback((preset?: DramaExplorePreset) => {
     setView({ kind: 'drama-explore', preset });
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  // Netflix Exclusives: bundled catalog of Netflix originals/exclusives
+  const openDramaNetflix = useCallback(() => {
+    setView({ kind: 'drama-netflix' });
     window.scrollTo({ top: 0 });
   }, []);
 
@@ -557,13 +565,19 @@ export default function AjestApp() {
         {/* ── K-drama / Asian drama (dramacool tier) ── */}
         {medium === 'drama' && view.kind === 'drama-home' && (
           <div className="mx-auto max-w-7xl md:px-8">
-            <DramaHome onOpen={openDrama} onPlay={playDrama} onExplore={openDramaExplore} />
+            <DramaHome onOpen={openDrama} onPlay={playDrama} onExplore={openDramaExplore} onNetflix={openDramaNetflix} />
           </div>
         )}
         {medium === 'drama' && view.kind === 'drama-search' && <DramaSearchView onOpen={openDrama} />}
         {medium === 'drama' && view.kind === 'drama-explore' && (
-          <DramaExploreView key={JSON.stringify(view.preset || {})} preset={view.preset} onOpen={openDrama} />
+          <DramaExploreView
+            key={JSON.stringify(view.preset || {})}
+            preset={view.preset}
+            onOpen={openDrama}
+            onNetflix={openDramaNetflix}
+          />
         )}
+        {medium === 'drama' && view.kind === 'drama-netflix' && <NetflixCatalogView onOpen={openDrama} />}
         {medium === 'drama' && view.kind === 'drama-history' && (
           <DramaHistoryView onOpen={openDrama} onPlay={playDrama} />
         )}

@@ -42,6 +42,8 @@ const DRAMA_SORTS: { id: string; label: string }[] = [
 interface Props {
   preset?: DramaExplorePreset;
   onOpen: (d: DramaItem) => void;
+  /** Optional shortcut into the Netflix Exclusives catalog */
+  onNetflix?: () => void;
 }
 
 function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -60,7 +62,7 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
   );
 }
 
-export function DramaExploreView({ preset, onOpen }: Props) {
+export function DramaExploreView({ preset, onOpen, onNetflix }: Props) {
   const [country, setCountry] = useState(preset?.country || '');
   const [genre, setGenre] = useState(preset?.genre || '');
   const [status, setStatus] = useState(preset?.status || '');
@@ -138,6 +140,17 @@ export function DramaExploreView({ preset, onOpen }: Props) {
             className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-[11.5px] font-semibold text-white/55 transition hover:border-[var(--aj-acc-40)] hover:text-white"
           >
             <IconClose size={12} /> Clear filters
+          </button>
+        )}
+        {onNetflix && (
+          <button
+            onClick={onNetflix}
+            className="inline-flex items-center gap-1.5 rounded-full border border-[#e50914]/40 bg-[#e50914]/10 px-3 py-1.5 text-[11.5px] font-bold text-[#ff6b70] transition hover:border-[#e50914]/70 hover:bg-[#e50914]/20"
+          >
+            <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-[3px] bg-gradient-to-b from-[#e50914] to-[#7d0009] text-[8px] font-black leading-none text-white">
+              N
+            </span>
+            Netflix Exclusives
           </button>
         )}
       </div>

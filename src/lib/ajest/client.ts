@@ -175,6 +175,18 @@ export async function fetchDramaExplore(p: {
   return r.json();
 }
 
+// ── Netflix Exclusives (bundled catalog + tap-to-resolve) ────────────────────
+
+export async function resolveNetflixTitle(
+  title: string,
+  year?: number
+): Promise<{ ok: boolean; item?: DramaItem | null; error?: string }> {
+  const q = new URLSearchParams({ resolve: title });
+  if (year) q.set('year', String(year));
+  const r = await fetchT(`/api/drama/netflix?${q.toString()}`, 25000);
+  return r.json();
+}
+
 // ── Formatting helpers ───────────────────────────────────────────────────────
 
 export function fmtDuration(min?: number): string {
