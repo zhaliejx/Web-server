@@ -295,6 +295,26 @@ function absEmbedUrl(url: string): string {
   return `https://dramacool9.rest${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
+/** Dead-embed hygiene — dramacool sometimes lists hoster entries that 404 for
+ *  EVERYONE, e.g. kissasian's gdriveplayer wrapper carrying an EMPTY `data=`
+ *  param (observed live on "Doona!" ep1, Oct 2026). The player cannot detect
+ *  a cross-origin 404, so that junk always costs the user the first tap +
+ *  one manual failover. Filtering provably-empty player params at build time
+ *  removes the dead entry before it ever reaches the source list. */
+function isDeadEmbedUrl(url: string): boolean {
+  try {
+    const u = new URL(url, 'https://x.invalid');
+    for (const [k, v] of u.searchParams) {
+      // the params these wrapper players actually play from — an empty value
+      // means the embed renders nothing but a 404 / error screen
+      if (['data', 'url', 'id', 'file', 'vid', 'code'].includes(k.toLowerCase()) && !v.trim()) return true;
+    }
+  } catch {
+    /* unparseable — let the watchdog deal with it */
+  }
+  return false;
+}
+
 // ── MyAsianTV (ww7.myasiantv.rest) — independent episode mirror ─────────────
 // Dramacool's episode payload now points at MyAsianTV watch pages (WordPress),
 // and MyAsianTV embeds its own player (zumivids) with a built-in server
@@ -528,10 +548,12 @@ export async function dramaStreams(
   if (enabled.has('dc-embeds')) {
     for (const s of streamUrls) {
       if (!s.url) continue;
+      const abs = absEmbedUrl(s.url);
+      if (isDeadEmbedUrl(abs)) continue; // provably-404 entry — skip, save the tap
       const host = s.source || 'mirror';
       sources.push({
         provider: `dc-embed:${host}`,
-        url: `embed:${absEmbedUrl(s.url)}`,
+        url: `embed:${abs}`,
         quality: 'embed',
         isM3U8: false,
         note: 'Mirror player',

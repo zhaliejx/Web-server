@@ -47,6 +47,7 @@ const ROWS: Row[] = [
   ['Celebrity', 2023, 'South Korea', 1],
   ['Mask Girl', 2023, 'South Korea', 1],
   ['Daily Dose of Sunshine', 2023, 'South Korea', 1],
+  ['Doona!', 2023, 'South Korea', 1],
   ['Black Knight', 2023, 'South Korea', 1],
   ['Bloodhounds', 2023, 'South Korea', 1],
   ['Gyeongseong Creature', 2023, 'South Korea', 1],
