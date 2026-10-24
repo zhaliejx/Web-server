@@ -10,17 +10,13 @@ import type { AniZipData } from '@/lib/ajest/upstream';
 import { resolveGogoStreams } from '@/lib/ajest/gogo';
 import { kaizenLatest } from '@/lib/ajest/kaizen';
 import { aniPmEmbedUrl } from '@/lib/ajest/anipm';
-import { myserverForAnime } from '@/lib/ajest/myserver';
 import type { StreamsPayload, VideoSource } from '@/lib/ajest/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 // ── Stream resolution (parallel tiers) ───────────────────────────────────────
-//   0. My Server — self-hosted vault (data/myserver map: Telegram tg-worker
-//      streams / archive.org MP4). Instant local lookup, no network; plays
-//      first when the vault has the episode. Not toggleable — it's ours.
-//   1. ani.pm verified-address embed (AniList id) — first upstream tier
+//   1. ani.pm verified-address embed (AniList id) — first in the chain
 //   2. gogoanime.by direct scrape (slug guess → site search → relay search)
 //   3. AnimeKaizen latest-episode mirror (Blogger embed)
 //   4. official YouTube resolution (channel-whitelisted uploads)
@@ -154,18 +150,7 @@ export async function GET(req: Request) {
   // ── Compose the ordered fallback chain ────────────────────────────────────
   const sources: VideoSource[] = [];
 
-  // 0. My Server — self-hosted vault. Instant (bundled map), so it never
-  //    delays the response. The Player streams these natively and skips the
-  //    Vercel proxy (episode files must not transit serverless bandwidth).
-  //    If the vault worker is down, the Player's watchdog falls through to
-  //    the regular chain below.
-  const mine = myserverForAnime(
-    { anilistId: bridgedAnilist, titles: [main, english, romaji, native] },
-    episode
-  );
-  if (mine) sources.push(mine);
-
-  // 1. ani.pm verified-address embed — first upstream tier. Partner player with
+  // 1. ani.pm verified-address embed — chain-first. Partner player with
   //    `frame-ancestors *`; episode numbering matches AniList. Its Cloudflare
   //    blocks Node TLS fingerprints, so the server ships the URL blind and the
   //    Player verifies availability from the browser via the CORS-open partner

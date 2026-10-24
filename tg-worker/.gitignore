@@ -1,5 +1,0 @@
-.sessions/
-creds.json
-*.session
-*.session-journal
-__pycache__/

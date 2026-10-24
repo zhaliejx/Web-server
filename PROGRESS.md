@@ -10,37 +10,7 @@ chapter first.
 
 ---
 
-## Chapter 7 — My Server (self-hosted episodes) (current)
-
-The vault chapter: Ajest can now play episodes from storage **we own** —
-Telegram (unlimited, free) or any direct-MP4 host — as a first-priority
-source above ani.pm/gogo, with silent failover to the regular chain when the
-vault misses or is down.
-
-- **Tier 0 source** — `/api/streams` and `/api/drama/streams` consult a
-  hand-curated map (`src/lib/ajest/myserver-data.json`, pasted blocks from
-  `tg-worker/upload.py`) BEFORE any upstream tier. Lookups are instant local
-  matches (AniList id / titles / drama slug + episode), so an empty vault
-  changes nothing.
-- **tg-worker** (`tg-worker/`) — a FastAPI + Telethon service that streams
-  Telegram-stored files as plain MP4 over HTTP: Range-aware 206 partials,
-  1 MB chunk alignment, CORS open, `/health` for uptime pingers. Render
-  free-tier deployable (`render.yaml` included).
-- **upload.py** — one-command episode uploader: login once (`--login-bot`),
-  then `python upload.py "file.mp4" --channel @vault --worker … --anilist 21
-  --episode 1109` prints the paste-ready JSON block.
-- **No Vercel bandwidth burn** — the Player streams `myserver` sources
-  natively (`<video src>`, no `/api/proxy` wrapper); episodes never transit
-  serverless functions. Range support keeps seeking exact on every device,
-  including old iPads.
-- **Verified live**: vault source served at chain position 0, native video
-  mounted with the raw URL, codec-blocked sandbox correctly failed over to
-  ani.pm, and a VP9 test entry achieved real playback (readyState 4,
-  currentTime advancing).
-
----
-
-## Chapter 6 — Old Devices & Drama Navigation
+## Chapter 6 — Old Devices & Drama Navigation (current)
 
 The app now survives a 2014 iPad Air 2 and the drama section got real
 navigation. Fixes for "stuck in loading on my iPad" + "fix drama navigation" +
