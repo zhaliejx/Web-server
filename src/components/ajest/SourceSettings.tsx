@@ -21,6 +21,8 @@ const CREDITS: { name: string; role: string }[] = [
   { name: 'YouTube', role: 'Official channel uploads' },
   { name: 'Dramacool', role: 'Drama catalog, direct HLS & hoster mirrors' },
   { name: 'MyAsianTV', role: 'Independent drama episode mirror' },
+  { name: 'Rakuten Viki', role: 'Official drama matches (links out — DRM-protected)' },
+  { name: 'YouTube dramas', role: 'Full episodes from Viki Global TV, KBS World, iQiyi' },
   { name: 'MangaFire', role: 'Embedded manga reader (iframe)' },
   { name: 'MangaDex', role: 'Manga catalog & reader' },
   { name: 'MangaRead', role: 'Manga mirror & chapter fallback' },
@@ -195,11 +197,12 @@ export function SourceSettings({ open, onClose }: { open: boolean; onClose: () =
             Drama sources
           </h3>
           <p className="px-3 pb-2 text-[11.5px] leading-snug text-white/45">
-            Chain: Dramacool mirrors → MyAsianTV → Dramacool direct. Mirror
-            players render inside Ajest with their own controls and cost the
-            server nothing, so they stay on. The direct HLS tier relays video
-            through Ajest's server — it stays off by default to keep data usage
-            tiny.
+            Chain: Dramacool mirrors → MyAsianTV → YouTube official →
+            Dramacool direct, with a Rakuten Viki chip when a title is
+            verifiably on Viki. Mirror players render inside Ajest with their
+            own controls and cost the server nothing, so they stay on. The
+            direct HLS tier relays video through Ajest's server — it stays off
+            by default to keep data usage tiny.
           </p>
           <ul className="flex flex-col divide-y divide-white/[0.05]">
             {DRAMA_SOURCE_ORDER.map((id) => {

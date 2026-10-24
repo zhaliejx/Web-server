@@ -630,6 +630,7 @@ export default function AjestApp() {
           key={`dc:${dramaIntent.drama.slug}:${dramaIntent.episode}`}
           anime={dramaAsCard(dramaIntent.drama)}
           dramaSlug={dramaIntent.drama.slug}
+          dramaTitle={dramaIntent.drama.title}
           episode={dramaIntent.episode}
           episodeTitle={dramaEpisodes.find((e) => e.number === dramaIntent.episode)?.title}
           resumeAt={

@@ -140,13 +140,15 @@ export function useSourcePrefs(): {
 }
 
 // ── Drama source registry + preferences ─────────────────────────────────────
-// Chain: Dramacool direct HLS → Dramacool hoster mirrors (Vidmoly, Streamtape,
-// MixDrop, AsianCTV…) → MyAsianTV. The direct tier relays video through the
-// server proxy and burns bandwidth; the mirror tiers are provider-rendered
-// iframes that cost the server nothing. Defaults follow the family-safe rule:
-// free tiers on, relay tier off unless explicitly enabled.
+// Chain: Dramacool hoster mirrors (Vidmoly, Streamtape, MixDrop, AsianCTV…)
+// → MyAsianTV → YouTube official uploads (Viki Global TV, KBS World, iQiyi…)
+// → Dramacool direct HLS, plus a Rakuten Viki official-link chip. The direct
+// tier relays video through the server proxy and burns bandwidth; the mirror
+// and YouTube tiers are provider-rendered/native and cost the server nothing.
+// Defaults follow the family-safe rule: free tiers on, relay tier off unless
+// explicitly enabled.
 
-export const DRAMA_SOURCE_ORDER = ['dc-hls', 'dc-embeds', 'mat'] as const;
+export const DRAMA_SOURCE_ORDER = ['dc-embeds', 'mat', 'yt', 'viki', 'dc-hls'] as const;
 export type DramaSourceId = (typeof DRAMA_SOURCE_ORDER)[number];
 
 export interface DramaSourceMeta {
@@ -157,16 +159,10 @@ export interface DramaSourceMeta {
 }
 
 export const DRAMA_SOURCES: Record<DramaSourceId, DramaSourceMeta> = {
-  'dc-hls': {
-    id: 'dc-hls',
-    label: 'Dramacool direct',
-    blurb: 'Native Ajest player on a pre-resolved HLS stream — only when the source managed to pre-resolve it. Relays video through the server, so it stays off by default.',
-    badge: 'Heavy',
-  },
   'dc-embeds': {
     id: 'dc-embeds',
     label: 'Dramacool mirrors',
-    blurb: 'Every hoster the episode carries — Vidmoly, Streamtape, MixDrop, AsianCTV. Provider-rendered players with their own controls. Zero server data. On by default.',
+    blurb: 'First in the chain — every hoster the episode carries: Vidmoly, Streamtape, MixDrop, AsianCTV. Provider-rendered players with their own controls. Zero server data. On by default.',
     badge: 'First',
   },
   mat: {
@@ -174,6 +170,24 @@ export const DRAMA_SOURCES: Record<DramaSourceId, DramaSourceMeta> = {
     label: 'MyAsianTV',
     blurb: 'Independent mirror hosting most of the same episodes with a built-in server switcher inside its player. Zero server data. On by default.',
     badge: 'Backup',
+  },
+  yt: {
+    id: 'yt',
+    label: 'YouTube official',
+    blurb: 'Full episodes on official channels — Viki Global TV, KBS World, iQiyi, WeTV and friends. Native Ajest controls, zero server data, no goofy hoster ads. On by default.',
+    badge: 'Legit',
+  },
+  viki: {
+    id: 'viki',
+    label: 'Rakuten Viki',
+    blurb: 'When a drama is verifiably on Viki, a one-tap official chip appears — their episodes are DRM-protected and refuse embedding, so they play on viki.com (their free tier has its own ads). Costs nothing.',
+    badge: 'Official',
+  },
+  'dc-hls': {
+    id: 'dc-hls',
+    label: 'Dramacool direct',
+    blurb: 'Native Ajest player on a pre-resolved HLS stream — only when the source managed to pre-resolve it. Relays video through the server, so it stays off by default.',
+    badge: 'Heavy',
   },
 };
 

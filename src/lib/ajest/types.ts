@@ -183,6 +183,9 @@ export interface DramaStreamsPayload {
   sources: VideoSource[];
   providersTried: { provider: string; ok: boolean; error?: string }[];
   episodeTitle?: string;
+  /** Verified Rakuten Viki match — official web link chip (their episodes are
+   *  Widevine DRM'd, so it never joins the playable chain) */
+  viki?: { title: string; url: string };
 }
 
 export interface DramaHistoryEntry {

@@ -124,11 +124,14 @@ export async function fetchDramaDetail(slug: string): Promise<DramaDetail & { ok
   return r.json();
 }
 
-export async function fetchDramaStreams(slug: string, episode: number): Promise<DramaStreamsPayload> {
+export async function fetchDramaStreams(slug: string, episode: number, title?: string): Promise<DramaStreamsPayload> {
   const p = new URLSearchParams({
     slug,
     episode: String(episode),
   });
+  // Display title — lets the server run the YouTube / Viki side-tiers in
+  // parallel with the dramacool page fetch (no added resolution latency)
+  if (title) p.set('title', title);
   // Drama source toggles — disabled tiers are skipped server-side entirely
   p.set('providers', enabledDramaSources().join(','));
   const r = await fetchT(`/api/drama/streams?${p.toString()}`);

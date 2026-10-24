@@ -567,6 +567,145 @@ export function rankYoutubeTrailer(videos: YtVideo[]): YtVideo | null {
   return null;
 }
 
+// ── Drama-side YouTube ranking ──────────────────────────────────────────────
+// Drama full episodes live on official broadcaster / licensor channels —
+// notably Viki Global TV (Rakuten Viki's own uploads), KBS World, iQiyi,
+// WeTV/Tencent, Viu and Netflix Philippines. Viki's own site serves every
+// episode Widevine-DRM'd (dt2_dt3 manifests, no embeddable player), so their
+// YouTube channel is the only legitimate way to bring "Viki content" into the
+// native player — ad-light, zero server bandwidth, own controls.
+export const DRAMA_OFFICIAL_CHANNELS = [
+  'viki global tv', 'rakuten viki', 'kbs world', 'kbs drama',
+  'iqiyi', 'wetv', 'tencent video', 'viu', 'netflix',
+  'astro', 'gma network', 'abs-cbn', 'jtbc', 'sbs drama', 'mbc drama', 'tvn d',
+];
+
+/** Rank YouTube results for a DRAMA full-episode upload; null when none
+ *  qualify. Same scoring shape as the anime ranker, tuned for dramas:
+ *  20-100 min runtimes, "eng sub" naming conventions, highlight/shorts junk. */
+export function rankYoutubeDramaEpisode(
+  videos: YtVideo[],
+  title: string,
+  ep: number
+): { video: YtVideo; official: boolean } | null {
+  const t = title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const tok = t.split(' ').filter((w) => w.length > 2);
+  let bestOfficial: { v: YtVideo; score: number } | null = null;
+  let bestCommunity: { v: YtVideo; score: number } | null = null;
+  for (const v of videos) {
+    const title = v.title.toLowerCase();
+    const ch = v.channel.toLowerCase();
+    const official = DRAMA_OFFICIAL_CHANNELS.some((o) => ch.includes(o.toLowerCase()));
+    let score = 0;
+    if (official) score += 120;
+    // Episode number — dramas write "Episode 5", "EP 5", "Ep 5", "[Ep 5]"
+    if (new RegExp(`(episode|ep|eps?)\\s*\\.?\\s*0*${ep}\\b`).test(title)) score += 50;
+    if (new RegExp(`\\b0*${ep}\\b`).test(title)) score += 15;
+    // K-dramas run 45-90 min; C-dramas 20-50. Anything ≥ 20 min is episode-ish
+    if (v.durationSec >= 20 * 60) score += 30;
+    else if (v.durationSec > 0 && v.durationSec < 10 * 60) score -= 90;
+    if (/\b(clip|edit|amv|reaction|recap|shorts|teaser|highlight|mv|ost|review|explain|top\s*10)\b/.test(title)) score -= 70;
+    if (/\b(english sub|eng sub|subbed|esub|multi sub|free episode|full episode|full)\b/.test(title)) score += 15;
+    // Title relevance: overlap with drama title tokens
+    const overlap = tok.filter((w) => title.includes(w)).length;
+    if (tok.length) score += Math.round((overlap / tok.length) * 40);
+    // Community uploads must clear a much higher bar (episode match + length)
+    const threshold = official ? 100 : 150;
+    if (score >= threshold) {
+      const slot = official ? bestOfficial : bestCommunity;
+      if (!slot || score > slot.score) {
+        if (official) bestOfficial = { v, score };
+        else bestCommunity = { v, score };
+      }
+    }
+  }
+  if (bestOfficial) return { video: bestOfficial.v, official: true };
+  if (bestCommunity) return { video: bestCommunity.v, official: false };
+  return null;
+}
+
+// ── Rakuten Viki title bridge ────────────────────────────────────────────────
+// Viki's site serves every full episode as Widevine/PlayReady DRM DASH
+// (dt2_dt3 manifests via manifest-viki.viki.io) and hard-blocks framing
+// (x-frame-options: SAMEORIGIN everywhere, /player/<id> route is 404) — so
+// their catalog cannot play inside Ajest and cannot be ad-stripped without
+// defeating their free tier's model, which we won't do. What IS possible:
+// verify a title exists on Viki (their legacy v4 search needs no signature)
+// and hand the user a one-tap official link. Matching is strict — the legacy
+// index is weak on modern English titles, so only confident matches surface.
+export interface VikiMatch {
+  title: string;
+  /** Full web URL, e.g. https://www.viki.com/tv/38805c-a-romance-of-the-little-forest */
+  url: string;
+}
+
+function normTitle(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/** Search Viki and return a confident title match (or null). Cached 6 h. */
+export function vikiTitleSearch(title: string, timeoutMs = 7000): Promise<VikiMatch | null> {
+  const q = title.trim();
+  if (!q) return Promise.resolve(null);
+  return cached(`viki:${normTitle(q)}`, 6 * 60 * 60_000, async () => {
+    const url = `https://api.viki.io/v4/search.json?c=${encodeURIComponent(q)}&app=100000a&per_page=20`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        signal: ctrl.signal,
+        cache: 'no-store',
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36',
+        },
+      });
+      if (!res.ok) return null;
+      const rows = (await res.json()) as {
+        id?: string;
+        tt?: string; // English title
+        tf?: string; // full/original title
+        t?: string; // type — series|movie
+        u?: { w?: string }; // web path
+        blocking?: { geo?: boolean; paywall?: boolean; upcoming?: boolean };
+      }[];
+      if (!Array.isArray(rows)) return null;
+      const target = normTitle(q);
+      const targetTok = new Set(target.split(' ').filter(Boolean));
+      let best: { row: (typeof rows)[number]; score: number } | null = null;
+      for (const row of rows) {
+        if (!row?.u?.w || row.blocking?.upcoming) continue;
+        for (const cand of [row.tt, row.tf]) {
+          if (!cand) continue;
+          const c = normTitle(cand);
+          if (c === target) {
+            if (!best || best.score < 100) best = { row, score: 100 };
+            break;
+          }
+          // Token overlap — every meaningful token of one title appears in the other
+          const candTok = c.split(' ').filter(Boolean);
+          if (!candTok.length || !targetTok.size) continue;
+          const hit = candTok.filter((w) => targetTok.has(w)).length;
+          const ratio = hit / Math.max(candTok.length, targetTok.size);
+          const score = Math.round(ratio * 90);
+          if (score >= 75 && (!best || score > best.score)) best = { row, score };
+          if (cand === row.tf) break;
+        }
+      }
+      if (!best) return null;
+      return { title: best.row.tt || best.row.tf || q, url: `https://www.viki.com${best.row.u.w}` };
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(t);
+    }
+  });
+}
+
 // ── Rouge relay (community Anime-API) — search assist ───────────────────
 export interface RougeResult {
   id: string;

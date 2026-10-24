@@ -18,6 +18,7 @@
 // (hls.js), never through our /api/proxy (that would eat the CF challenge).
 
 import type { DramaDetail, DramaEpisode, DramaItem, VideoSource } from './types';
+import { youtubeSearch, rankYoutubeDramaEpisode, vikiTitleSearch } from './upstream';
 
 const DC_HOSTS = ['https://dramacool9.rest', 'https://dramacool.rest', 'https://dramacool.lat'];
 const BROWSER_UA =
@@ -404,6 +405,10 @@ export interface DramaStreamsPayloadData {
   sources: VideoSource[];
   providersTried: { provider: string; ok: boolean; error?: string }[];
   episodeTitle?: string;
+  /** Verified Rakuten Viki match — official web link only (their streams are
+   *  Widevine DRM'd and their player refuses framing, so it never joins the
+   *  playable chain; the Player surfaces it as a one-tap official chip). */
+  viki?: { title: string; url: string };
 }
 
 const streamsCache = new Map<string, { at: number; data: DramaStreamsPayloadData }>();
@@ -422,19 +427,69 @@ function episodeMatches(raw: RawEpisode, ep: number): boolean {
 /** Episode sources — ordered fallback chain:
  *  1. pre-resolved direct HLS (hlsproxy) when the SSR worker managed it
  *  2. every hoster embed the episode carries (vidmoly/streamtape/mixdrop/asianctv…)
- *  3. MyAsianTV's own embedded player (zumivids) for the same episode */
+ *  3. MyAsianTV's own embedded player (zumivids) for the same episode
+ *  4. YouTube full-episode upload (Viki Global TV, KBS World, iQiyi…) —
+ *     official channel uploads on the native player, zero server bandwidth
+ *  + a Rakuten Viki official web link when the title is verifiably on Viki
+ *    (their episodes are DRM'd and unframeable, so it rides alongside the
+ *    chain as an official chip instead of a source).
+ *
+ *  `opts.title` (drama display title, forwarded by the client) unlocks the
+ *  parallel fast path: the YouTube and Viki lookups need only the title, so
+ *  they run CONCURRENTLY with the dramacool watch-page fetch instead of
+ *  after it — cold resolution stays ~2-3 s instead of +4-8 s of pile-up. */
 export async function dramaStreams(
   slug: string,
   ep: number,
-  opts: { providers?: string[] } = {}
+  opts: { providers?: string[]; title?: string } = {}
 ): Promise<DramaStreamsPayloadData> {
-  const enabled = new Set(opts.providers || ['dc-hls', 'dc-embeds', 'mat']);
+  const enabled = new Set(
+    opts.providers || ['dc-embeds', 'mat', 'yt', 'dc-hls', 'viki']
+  );
   const cacheKey = `${slug}|${ep}|${[...enabled].sort().join(',')}`;
   const hit = streamsCache.get(cacheKey);
   if (hit && Date.now() - hit.at < STREAMS_TTL) return hit.data;
 
   const sources: VideoSource[] = [];
   const providersTried: { provider: string; ok: boolean; error?: string }[] = [];
+
+  // ── Parallel side-tiers (YouTube full episodes + Viki bridge) ─────────────
+  // Both run from the display title alone, so they start immediately — no
+  // waiting on the dramacool page. Hard per-tier budgets keep a slow YouTube
+  // or Viki answer from stalling the whole response; misses are honest
+  // ok:false rows, not errors.
+  const title = (opts.title || '').trim();
+  const ytTier = (async (): Promise<VideoSource | null> => {
+    if (!enabled.has('yt') || !title) return null;
+    try {
+      // Two query shapes race the cache — "<title>" episode N english sub and
+      // the compact "<title> ep N". youtubeSearch caches 30 min, so replays
+      // (and the next episode of the same show) cost one search each.
+      const [a, b] = await Promise.all([
+        youtubeSearch(`"${title}" episode ${ep} english sub`, 9000).catch(() => []),
+        youtubeSearch(`${title} ep ${ep}`, 9000).catch(() => []),
+      ]);
+      const ranked = rankYoutubeDramaEpisode([...a, ...b], title, ep);
+      if (!ranked) return null;
+      return {
+        provider: 'yt',
+        url: `youtube:${ranked.video.videoId}`,
+        quality: ranked.official ? 'official' : 'community',
+        isM3U8: false,
+        note: ranked.official
+          ? `Official YouTube upload · ${ranked.video.channel}`
+          : `YouTube upload · ${ranked.video.channel}`,
+      };
+    } catch {
+      return null;
+    }
+  })();
+  const vikiTier = (async () => {
+    if (!enabled.has('viki') || !title) return null;
+    return vikiTitleSearch(title, 7000).catch(() => null);
+  })();
+
+  // ── Dramacool watch page (drives tiers 1-3) ────────────────────────────────
   const html = await dcFetchHtml(`/drama/${encodeURIComponent(slug)}/episode-${ep}`);
   const state = parseNgState(html);
 
@@ -512,6 +567,34 @@ export async function dramaStreams(
     });
   }
 
+  // (4) YouTube full-episode upload — official licensor/broadcaster channels
+  //     (Viki Global TV, KBS World, iQiyi…). Started in parallel at the top;
+  //     awaited here so it lands after the mirror tiers in failover order.
+  //     A miss just means YouTube has no qualifying upload for this episode.
+  if (enabled.has('yt')) {
+    const ytSource = title ? await ytTier : null;
+    if (ytSource) sources.push(ytSource);
+    providersTried.push({
+      provider: 'yt',
+      ok: !!ytSource,
+      error: ytSource ? undefined : 'no official upload found',
+    });
+  }
+
+  // (5) Rakuten Viki bridge — their episodes are Widevine DRM'd and their
+  //     player refuses framing, so a match never becomes a playable source.
+  //     It rides the payload as an official web link the Player renders as a
+  //     chip (honest label: Viki free tier carries their own ad breaks).
+  let vikiMatch: Awaited<typeof vikiTier> = null;
+  if (enabled.has('viki')) {
+    vikiMatch = title ? await vikiTier : null;
+    providersTried.push({
+      provider: 'viki',
+      ok: !!vikiMatch,
+      error: vikiMatch ? undefined : 'no verified match',
+    });
+  }
+
   // Mirror tiers overlap (MyAsianTV often re-embeds the same hoster) — drop
   // exact-URL duplicates so a dead hoster never eats two failover steps.
   const seen = new Set<string>();
@@ -522,7 +605,12 @@ export async function dramaStreams(
     return true;
   });
 
-  const data: DramaStreamsPayloadData = { sources: deduped, providersTried, episodeTitle: epRaw?.title || undefined };
+  const data: DramaStreamsPayloadData = {
+    sources: deduped,
+    providersTried,
+    episodeTitle: epRaw?.title || undefined,
+    viki: vikiMatch || undefined,
+  };
   streamsCache.set(cacheKey, { at: Date.now(), data });
   return data;
 }

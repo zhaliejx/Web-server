@@ -28,6 +28,8 @@ interface PlayerProps {
   anime: AnimeCardType;
   /** When set, sources resolve through the drama tier (/api/drama/streams) */
   dramaSlug?: string;
+  /** Drama display title — enables the parallel YouTube / Viki side-tiers */
+  dramaTitle?: string;
   episode: number;
   episodeTitle?: string;
   resumeAt?: number;
@@ -57,6 +59,8 @@ function providerLabel(p: string): string {
     return `Dramacool · ${host.charAt(0).toUpperCase()}${host.slice(1)}`;
   }
   if (p === 'mat') return 'MyAsianTV';
+  if (p === 'yt') return 'YouTube';
+  if (p === 'viki') return 'Rakuten Viki';
   return p;
 }
 
@@ -168,6 +172,7 @@ function fmtTime(sec: number): string {
 export default function Player({
   anime,
   dramaSlug,
+  dramaTitle,
   episode,
   episodeTitle,
   resumeAt,
@@ -670,12 +675,18 @@ export default function Player({
       setPhase('resolving');
       setFallbackNote(null);
       setProviders([]);
-      const load = dramaSlug ? fetchDramaStreams(dramaSlug, episode) : fetchStreams(anime, episode);
+      const load = dramaSlug
+        ? fetchDramaStreams(dramaSlug, episode, dramaTitle)
+        : fetchStreams(anime, episode);
       load
         .then((payload) => {
           if (cancelled) return;
           setProviders(payload.providersTried || []);
-          setOfficialLinks((payload as { officialLinks?: typeof officialLinks }).officialLinks || []);
+          const vl = (payload as { viki?: { title: string; url: string } }).viki;
+          setOfficialLinks([
+            ...(vl ? [{ site: 'Rakuten Viki', url: vl.url }] : []),
+            ...((payload as { officialLinks?: typeof officialLinks }).officialLinks || []),
+          ]);
           sourcesRef.current = payload.sources || [];
           if (payload.sources?.length) {
             attachSource(0);
@@ -689,7 +700,7 @@ export default function Player({
       cancelled = true;
       clearTimeout(t);
     };
-  }, [anime.id, dramaSlug, episode]);
+  }, [anime.id, dramaSlug, dramaTitle, episode]);
 
   // ── Embedded player lifecycle (official IFrame API — reliable events) ──────
   useEffect(() => {
@@ -1161,6 +1172,9 @@ export default function Player({
                     {!p.ok && !p.provider.startsWith('youtube') && (
                       <span className="opacity-60">· {p.error?.slice(0, 40)}</span>
                     )}
+                    {p.provider === 'viki' && p.ok && (
+                      <span className="opacity-60">· official link</span>
+                    )}
                     {p.ok && isActive && <span className="font-semibold">· streaming</span>}
                   </li>
                 );
@@ -1209,12 +1223,18 @@ export default function Player({
             <button
               onClick={() => {
                 setPhase('resolving');
-                const load = dramaSlug ? fetchDramaStreams(dramaSlug, episode) : fetchStreams(anime, episode);
+                const load = dramaSlug
+                  ? fetchDramaStreams(dramaSlug, episode, dramaTitle)
+                  : fetchStreams(anime, episode);
                 load
                   .then((p) => {
                     sourcesRef.current = p.sources || [];
                     setProviders(p.providersTried || []);
-                    setOfficialLinks((p as { officialLinks?: typeof officialLinks }).officialLinks || []);
+                    const vl = (p as { viki?: { title: string; url: string } }).viki;
+                    setOfficialLinks([
+                      ...(vl ? [{ site: 'Rakuten Viki', url: vl.url }] : []),
+                      ...((p as { officialLinks?: typeof officialLinks }).officialLinks || []),
+                    ]);
                     if (p.sources?.length) attachSource(0);
                     else setPhase('error');
                   })
