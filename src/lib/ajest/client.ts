@@ -1,7 +1,7 @@
 'use client';
 
 import type { AnimeCard, DetailPayload, DramaDetail, DramaItem, DramaStreamsPayload, HealthPayload, StreamsPayload } from './types';
-import { enabledProviders, loadAudioPref } from './prefs';
+import { enabledProviders, enabledDramaSources, loadAudioPref } from './prefs';
 
 // ── Client fetch helpers (all relative paths through the Next.js gateway) ───
 // Every call is timeout-guarded: on an old iPad a hanging socket used to mean
@@ -125,7 +125,13 @@ export async function fetchDramaDetail(slug: string): Promise<DramaDetail & { ok
 }
 
 export async function fetchDramaStreams(slug: string, episode: number): Promise<DramaStreamsPayload> {
-  const r = await fetchT(`/api/drama/streams?slug=${encodeURIComponent(slug)}&episode=${episode}`);
+  const p = new URLSearchParams({
+    slug,
+    episode: String(episode),
+  });
+  // Drama source toggles — disabled tiers are skipped server-side entirely
+  p.set('providers', enabledDramaSources().join(','));
+  const r = await fetchT(`/api/drama/streams?${p.toString()}`);
   return r.json();
 }
 

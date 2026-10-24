@@ -7,7 +7,7 @@
 // • Credits: the public data & playback sources Ajest aggregates.
 
 import { useEffect, useRef } from 'react';
-import { PROVIDER_ORDER, PROVIDERS, MANGA_SOURCE_ORDER, MANGA_SOURCES, useSourcePrefs, useMangaSourcePrefs } from '@/lib/ajest/prefs';
+import { PROVIDER_ORDER, PROVIDERS, MANGA_SOURCE_ORDER, MANGA_SOURCES, DRAMA_SOURCE_ORDER, DRAMA_SOURCES, useSourcePrefs, useMangaSourcePrefs, useDramaSourcePrefs } from '@/lib/ajest/prefs';
 import { THEMES, useTheme } from '@/lib/ajest/themes';
 import { IconClose, IconCheck } from './icons';
 
@@ -19,6 +19,8 @@ const CREDITS: { name: string; role: string }[] = [
   { name: 'Gogoanime', role: 'Direct stream sources' },
   { name: 'AnimeKaizen', role: 'Latest-episode mirror' },
   { name: 'YouTube', role: 'Official channel uploads' },
+  { name: 'Dramacool', role: 'Drama catalog, direct HLS & hoster mirrors' },
+  { name: 'MyAsianTV', role: 'Independent drama episode mirror' },
   { name: 'MangaFire', role: 'Embedded manga reader (iframe)' },
   { name: 'MangaDex', role: 'Manga catalog & reader' },
   { name: 'MangaRead', role: 'Manga mirror & chapter fallback' },
@@ -29,6 +31,7 @@ const CREDITS: { name: string; role: string }[] = [
 export function SourceSettings({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { disabled, toggle, reset } = useSourcePrefs();
   const mangaPrefs = useMangaSourcePrefs();
+  const dramaPrefs = useDramaSourcePrefs();
   const { theme, setTheme } = useTheme();
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -116,10 +119,11 @@ export function SourceSettings({ open, onClose }: { open: boolean; onClose: () =
             Streaming sources
           </h3>
           <p className="px-3 pb-2 text-[11.5px] leading-snug text-white/45">
-            Chain: ani.pm → gogo → AnimeKaizen → YouTube. Only the primary
-            HD player is on by default — backup mirrors stay off to keep data
-            usage tiny. Turn them on anytime; AnimeKaizen and YouTube cost
-            nothing extra, while Direct streams relay video through the server.
+            Chain: Ani.pm → Gogoanime → AnimeKaizen → YouTube. Only the
+            primary Ani.pm tier is on by default — backup mirrors stay off to
+            keep data usage tiny. Turn them on anytime; AnimeKaizen and YouTube
+            cost nothing extra, while Gogoanime's direct streams relay video
+            through the server.
           </p>
           <ul className="flex flex-col divide-y divide-white/[0.05]">
             {PROVIDER_ORDER.map((id) => {
@@ -180,6 +184,75 @@ export function SourceSettings({ open, onClose }: { open: boolean; onClose: () =
                 className="text-[11.5px] font-semibold text-[var(--aj-acc-hi)] transition hover:text-white"
               >
                 Reset all
+              </button>
+            )}
+          </div>
+        </section>
+
+        {/* ── Drama sources ── */}
+        <section className="px-2 py-2">
+          <h3 className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/40">
+            Drama sources
+          </h3>
+          <p className="px-3 pb-2 text-[11.5px] leading-snug text-white/45">
+            Chain: Dramacool mirrors → MyAsianTV → Dramacool direct. Mirror
+            players render inside Ajest with their own controls and cost the
+            server nothing, so they stay on. The direct HLS tier relays video
+            through Ajest's server — it stays off by default to keep data usage
+            tiny.
+          </p>
+          <ul className="flex flex-col divide-y divide-white/[0.05]">
+            {DRAMA_SOURCE_ORDER.map((id) => {
+              const meta = DRAMA_SOURCES[id];
+              const on = !dramaPrefs.disabled.includes(id);
+              return (
+                <li key={id}>
+                  <button
+                    onClick={() => dramaPrefs.toggle(id)}
+                    role="switch"
+                    aria-checked={on}
+                    className="flex w-full items-center gap-3.5 rounded-xl px-3 py-3 text-left transition hover:bg-white/[0.035]"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[13px] font-bold ${on ? 'text-white' : 'text-white/35'}`}>
+                          {meta.label}
+                        </span>
+                        <span className="rounded-full bg-white/[0.07] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/45">
+                          {meta.badge}
+                        </span>
+                      </div>
+                      <p className={`mt-1 text-[11.5px] leading-snug ${on ? 'text-white/50' : 'text-white/25'}`}>
+                        {meta.blurb}
+                      </p>
+                    </div>
+                    <span
+                      className={`relative w-10 shrink-0 rounded-full transition-colors duration-200 ${
+                        on ? 'bg-[var(--aj-acc)]' : 'bg-white/[0.14]'
+                      }`}
+                      style={{ height: 22 }}
+                    >
+                      <span
+                        className={`absolute top-[3px] h-4 w-4 rounded-full bg-white shadow transition-all duration-200 ${
+                          on ? 'left-[22px]' : 'left-[3px]'
+                        }`}
+                      />
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="flex items-center justify-between px-3 pb-2 pt-2.5">
+            <span className="text-[10.5px] text-white/35">
+              {DRAMA_SOURCE_ORDER.length - dramaPrefs.disabled.length} of {DRAMA_SOURCE_ORDER.length} sources enabled
+            </span>
+            {dramaPrefs.disabled.filter((d) => d !== 'dc-hls').length > 0 && (
+              <button
+                onClick={dramaPrefs.reset}
+                className="text-[11.5px] font-semibold text-[var(--aj-acc-hi)] transition hover:text-white"
+              >
+                Reset
               </button>
             )}
           </div>

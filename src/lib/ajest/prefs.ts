@@ -6,7 +6,7 @@
 // set to /api/streams so disabled tiers are never even contacted — which also
 // makes resolution faster.
 //
-// DEFAULTS: only the primary tier (ani.pm HD player) is enabled. Backup
+// DEFAULTS: only the primary tier (Ani.pm) is enabled. Backup
 // mirrors stay OFF unless the user turns them on — direct-stream tiers relay
 // video through the server and would burn through the hosting plan's
 // bandwidth quota with a shared household of viewers. Embed tiers (kaizen,
@@ -30,15 +30,15 @@ export interface ProviderMeta {
 export const PROVIDERS: Record<ProviderId, ProviderMeta> = {
   anipm: {
     id: 'anipm',
-    label: 'HD player',
+    label: 'Ani.pm',
     blurb: 'First in the chain — verified full episodes, sub & dub, checked in your browser before it plays. Widest HD coverage.',
     kind: 'embed',
     badge: 'First',
   },
   gogo: {
     id: 'gogo',
-    label: 'Direct streams',
-    blurb: 'Real video files with Ajest controls — progress bar, resume, auto-next. Recent shows only. Off by default: heavy on server data.',
+    label: 'Gogoanime',
+    blurb: 'Direct stream files with Ajest controls — progress bar, resume, auto-next. Recent shows only. Off by default: heavy on server data.',
     kind: 'native',
     badge: 'Best experience',
   },
@@ -51,8 +51,8 @@ export const PROVIDERS: Record<ProviderId, ProviderMeta> = {
   },
   youtube: {
     id: 'youtube',
-    label: 'Official channel uploads',
-    blurb: 'Full episodes from official anime channels (Muse Asia, Crunchyroll…). Region-dependent. Off by default — free to enable.',
+    label: 'YouTube',
+    blurb: 'Official channel uploads — full episodes from Muse Asia, Crunchyroll and friends. Region-dependent. Off by default — free to enable.',
     kind: 'native',
     badge: 'Legit',
   },
@@ -135,6 +135,119 @@ export function useSourcePrefs(): {
   const reset = useCallback(() => {
     saveSourcePrefs({ disabled: DEFAULT_DISABLED });
     setDisabled(DEFAULT_DISABLED);
+  }, []);
+  return { disabled, toggle, reset };
+}
+
+// ── Drama source registry + preferences ─────────────────────────────────────
+// Chain: Dramacool direct HLS → Dramacool hoster mirrors (Vidmoly, Streamtape,
+// MixDrop, AsianCTV…) → MyAsianTV. The direct tier relays video through the
+// server proxy and burns bandwidth; the mirror tiers are provider-rendered
+// iframes that cost the server nothing. Defaults follow the family-safe rule:
+// free tiers on, relay tier off unless explicitly enabled.
+
+export const DRAMA_SOURCE_ORDER = ['dc-hls', 'dc-embeds', 'mat'] as const;
+export type DramaSourceId = (typeof DRAMA_SOURCE_ORDER)[number];
+
+export interface DramaSourceMeta {
+  id: DramaSourceId;
+  label: string;
+  blurb: string;
+  badge: string;
+}
+
+export const DRAMA_SOURCES: Record<DramaSourceId, DramaSourceMeta> = {
+  'dc-hls': {
+    id: 'dc-hls',
+    label: 'Dramacool direct',
+    blurb: 'Native Ajest player on a pre-resolved HLS stream — only when the source managed to pre-resolve it. Relays video through the server, so it stays off by default.',
+    badge: 'Heavy',
+  },
+  'dc-embeds': {
+    id: 'dc-embeds',
+    label: 'Dramacool mirrors',
+    blurb: 'Every hoster the episode carries — Vidmoly, Streamtape, MixDrop, AsianCTV. Provider-rendered players with their own controls. Zero server data. On by default.',
+    badge: 'First',
+  },
+  mat: {
+    id: 'mat',
+    label: 'MyAsianTV',
+    blurb: 'Independent mirror hosting most of the same episodes with a built-in server switcher inside its player. Zero server data. On by default.',
+    badge: 'Backup',
+  },
+};
+
+/** Direct HLS relays video through the server proxy — opt-in only. */
+export const DRAMA_DEFAULT_DISABLED: DramaSourceId[] = ['dc-hls'];
+
+const DRAMA_LS_KEY = 'ajest-drama-sources-v1';
+
+export interface DramaSourcePrefs {
+  disabled: DramaSourceId[];
+}
+
+export function loadDramaSourcePrefs(): DramaSourcePrefs {
+  if (typeof window === 'undefined') return { disabled: DRAMA_DEFAULT_DISABLED };
+  try {
+    const raw = window.localStorage.getItem(DRAMA_LS_KEY);
+    if (!raw) return { disabled: DRAMA_DEFAULT_DISABLED };
+    const p = JSON.parse(raw) as DramaSourcePrefs;
+    const disabled = Array.isArray(p.disabled)
+      ? p.disabled.filter((d): d is DramaSourceId =>
+          (DRAMA_SOURCE_ORDER as readonly string[]).includes(d)
+        )
+      : [];
+    return { disabled: disabled.length >= DRAMA_SOURCE_ORDER.length ? DRAMA_DEFAULT_DISABLED : disabled };
+  } catch {
+    return { disabled: DRAMA_DEFAULT_DISABLED };
+  }
+}
+
+export function saveDramaSourcePrefs(prefs: DramaSourcePrefs) {
+  try {
+    window.localStorage.setItem(DRAMA_LS_KEY, JSON.stringify(prefs));
+  } catch {
+    /* storage unavailable — session-only */
+  }
+  window.dispatchEvent(new CustomEvent('ajest-drama-sources-changed'));
+}
+
+export function enabledDramaSources(): DramaSourceId[] {
+  const { disabled } = loadDramaSourcePrefs();
+  return DRAMA_SOURCE_ORDER.filter((s) => !disabled.includes(s));
+}
+
+/** React hook — toggles + subscribes to changes across components. */
+export function useDramaSourcePrefs(): {
+  disabled: DramaSourceId[];
+  toggle: (id: DramaSourceId) => void;
+  reset: () => void;
+} {
+  const [disabled, setDisabled] = useState<DramaSourceId[]>(() =>
+    typeof window === 'undefined' ? [] : loadDramaSourcePrefs().disabled
+  );
+  useEffect(() => {
+    const sync = () => setDisabled(loadDramaSourcePrefs().disabled);
+    window.addEventListener('ajest-drama-sources-changed', sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener('ajest-drama-sources-changed', sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+  const toggle = useCallback((id: DramaSourceId) => {
+    const cur = loadDramaSourcePrefs();
+    const next = cur.disabled.includes(id)
+      ? cur.disabled.filter((d) => d !== id)
+      : [...cur.disabled, id];
+    if (next.length < DRAMA_SOURCE_ORDER.length) {
+      saveDramaSourcePrefs({ disabled: next });
+      setDisabled(next);
+    }
+  }, []);
+  const reset = useCallback(() => {
+    saveDramaSourcePrefs({ disabled: DRAMA_DEFAULT_DISABLED });
+    setDisabled(DRAMA_DEFAULT_DISABLED);
   }, []);
   return { disabled, toggle, reset };
 }

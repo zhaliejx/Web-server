@@ -44,14 +44,30 @@ function proxied(url: string): string {
   return `/api/proxy?u=${encodeURIComponent(url)}`;
 }
 
-// Embedded sources are identity-masked in the UI — never reveal the upstream brand
+// Real upstream identities — the user asked for honest labels instead of
+// generic masks ("HD player" → Ani.pm, and so on for every tier).
 function providerLabel(p: string): string {
-  if (p.startsWith('youtube')) return 'Official source';
-  if (p === 'anipm') return 'HD player';
-  if (p === 'kaizen') return 'Kaizen mirror';
-  if (p === 'dc-hls') return 'Direct stream';
-  if (p.startsWith('dc-embed')) return 'Mirror player';
+  if (p === 'anipm') return 'Ani.pm';
+  if (p === 'kaizen') return 'AnimeKaizen';
+  if (p.startsWith('youtube')) return 'YouTube';
+  if (p.startsWith('gogo') || p.startsWith('relay')) return 'Gogoanime';
+  if (p === 'dc-hls') return 'Dramacool direct';
+  if (p.startsWith('dc-embed')) {
+    const host = p.slice('dc-embed:'.length) || 'mirror';
+    return `Dramacool · ${host.charAt(0).toUpperCase()}${host.slice(1)}`;
+  }
+  if (p === 'mat') return 'MyAsianTV';
   return p;
+}
+
+/** Drama hoster embeds run sandboxed: their own player UI and in-frame
+ *  navigation keep working, but top-navigation hijacks and click-popups are
+ *  blocked. ani.pm explicitly refuses sandboxed frames, so it (and Kaizen,
+ *  whose Blogger shell may too) stay unsandboxed behind the redirect shield. */
+function embedSandbox(provider: string): string | undefined {
+  return provider.startsWith('dc-embed') || provider === 'mat'
+    ? 'allow-scripts allow-same-origin allow-forms allow-presentation'
+    : undefined;
 }
 
 // ── ani.pm browser-side availability check ─────────────────────────────────
@@ -1036,6 +1052,7 @@ export default function Player({
             allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
             referrerPolicy="origin"
+            sandbox={embedSandbox(extEmbed.provider)}
             title={`Ajest — ${providerLabel(extEmbed.provider)}`}
             onLoad={() => {
               embedLoadedRef.current = true;
@@ -1063,16 +1080,19 @@ export default function Player({
             />
           )}
           {/* Wake strips — cross-origin iframes swallow mousemove, so these
-              thin strips above the iframe re-summon the chrome on hover/tap
-              while the middle of the screen stays fully interactive for the
-              upstream player's own controls. ani.pm skips both strips: the
-              guardrail shield already covers the top (and wakes the close
-              button), and the bottom zone is its live control-bar
-              passthrough. */}
+              thin strips re-summon the chrome on hover/tap. The BOTTOM of the
+              screen stays clear for drama hosters: their own control bar
+              lives in the lower edge of the frame, so the full-width strip
+              used to swallow exactly those clicks. Only two slim corner tabs
+              remain down there — the middle passthrough lets the upstream
+              player use its own navigation untouched. ani.pm skips the
+              strips: the guardrail shield covers the top, and the bottom zone
+              is its live control-bar passthrough. */}
           {extEmbed.provider !== 'anipm' && (
             <>
               <div className="absolute inset-x-0 top-0 z-[5] h-14" onMouseMove={bumpControls} onClick={bumpControls} />
-              <div className="absolute inset-x-0 bottom-0 z-[5] h-14" onMouseMove={bumpControls} onClick={bumpControls} />
+              <div className="absolute bottom-0 left-0 z-[5] h-14 w-24" onMouseMove={bumpControls} onClick={bumpControls} />
+              <div className="absolute bottom-0 right-0 z-[5] h-14 w-24" onMouseMove={bumpControls} onClick={bumpControls} />
             </>
           )}
           {/* ani.pm: no provider chip — it floats inside the bottom 96px
@@ -1162,7 +1182,7 @@ export default function Player({
             <p className="mt-1 max-w-md text-xs leading-relaxed text-white/50">
               {dramaSlug
                 ? 'The drama mirror chain could not serve this episode. It may not be hosted yet — try another mirror or episode.'
-                : 'The primary source could not serve this episode. Backup mirrors are OFF by default to save data — open Settings → Streaming sources and enable Direct streams / mirrors to widen coverage.'}
+                : 'The primary source could not serve this episode. Backup mirrors are OFF by default to save data — open Settings → Streaming sources and enable Gogoanime / the mirrors to widen coverage.'}
             </p>
           </div>
           {officialLinks.length > 0 && (

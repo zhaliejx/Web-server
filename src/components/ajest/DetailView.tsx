@@ -186,7 +186,7 @@ export function DetailView({ anime, onBack, onPlay, onOpen }: Props) {
               </button>
             </div>
 
-            {/* Audio track — Sub ⇄ Dub (remembered; dub rides the HD player tier) */}
+            {/* Audio track — Sub ⇄ Dub (remembered; dub rides the Ani.pm tier) */}
             <AudioToggle />
 
             {/* Next episode countdown */}
@@ -323,7 +323,7 @@ function AudioToggle() {
         ))}
       </div>
       <span className="text-[11px] leading-tight text-white/35">
-        {audio === 'dub' ? 'Dub via the HD player · falls back to sub' : 'Subbed on every tier'}
+        {audio === 'dub' ? 'Dub via Ani.pm · falls back to sub' : 'Subbed on every tier'}
       </span>
     </div>
   );

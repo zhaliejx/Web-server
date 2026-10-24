@@ -294,59 +294,235 @@ function absEmbedUrl(url: string): string {
   return `https://dramacool9.rest${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
+// ── MyAsianTV (ww7.myasiantv.rest) — independent episode mirror ─────────────
+// Dramacool's episode payload now points at MyAsianTV watch pages (WordPress),
+// and MyAsianTV embeds its own player (zumivids) with a built-in server
+// switcher. Both the watch page and its embed are plain-200 from datacenter
+// IPs (no Cloudflare bot-fight), so it's a reliable extra tier. It is reached
+// two ways: (a) fast path — the dramacool episode payload itself carries the
+// MyAsianTV epUrl; (b) search path — the WordPress REST API
+// (/wp-json/wp/v2/search) finds the episode post by title + number.
+
+const MAT_HOST = 'https://ww7.myasiantv.rest';
+const MAT_UA = BROWSER_UA;
+
+async function matFetch(url: string, timeoutMs = 9000): Promise<string> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      cache: 'no-store',
+      headers: {
+        'User-Agent': MAT_UA,
+        Accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** Pull the player embed out of a MyAsianTV watch page (skips analytics junk).
+ *  Zumivids (their native player) is preferred when present. */
+export function matEmbedFromPage(html: string): string | null {
+  const candidates = [
+    ...[...html.matchAll(/<iframe[^>]+(?:data-src|src)="(https?:\/\/[^"']+)"/gi)].map((m) => m[1]),
+  ];
+  const junk = /googletagmanager|google-analytics|adservice|doubleclick|facebook|disqus|youtube\.com|youtu\.be|wp-json|oembed/i;
+  const clean = candidates.filter((u) => !junk.test(u));
+  return clean.find((u) => u.includes('zumivids')) || clean[0] || null;
+}
+
+interface MatSearchHit {
+  title?: string;
+  url?: string;
+}
+
+/** Search path: find `ep` of `title` on MyAsianTV via the WP REST search API. */
+async function matSearchEpisodePage(title: string, ep: number): Promise<string | null> {
+  try {
+    const raw = await matFetch(
+      `${MAT_HOST}/wp-json/wp/v2/search?search=${encodeURIComponent(title.slice(0, 60))}&per_page=20`,
+      8000
+    );
+    const hits = JSON.parse(raw) as MatSearchHit[];
+    const epRe = /-ep-([0-9.]+)-eng-sub\/?$/;
+    // Exact episode post first, else derive the series slug from any hit
+    let seriesSlug = '';
+    for (const h of hits) {
+      const url = h.url || '';
+      const m = url.match(epRe);
+      if (m && Math.abs(parseFloat(m[1]) - ep) < 0.001) return url;
+      if (!seriesSlug && m) seriesSlug = url.replace(epRe, '');
+    }
+    if (!seriesSlug) return null;
+    return `${seriesSlug}-ep-${ep}-eng-sub/`;
+  } catch {
+    return null;
+  }
+}
+
+const matEpCache = new Map<string, { at: number; embed: string | null }>();
+const MAT_TTL = 10 * 60_000;
+
+/** Resolve the MyAsianTV embed for an episode. `matEpUrl` = fast-path url from
+ *  the dramacool payload; falls back to WP-REST search when absent. */
+async function matEpisodeEmbed(
+  title: string,
+  ep: number,
+  matEpUrl: string | null
+): Promise<string | null> {
+  const cacheKey = (matEpUrl || `${title}#${ep}`).toLowerCase();
+  const hit = matEpCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < MAT_TTL) return hit.embed;
+
+  let pageUrl = matEpUrl && /^https?:\/\//.test(matEpUrl) ? matEpUrl : null;
+  if (!pageUrl) pageUrl = await matSearchEpisodePage(title, ep);
+  if (!pageUrl) {
+    matEpCache.set(cacheKey, { at: Date.now(), embed: null });
+    return null;
+  }
+  try {
+    const html = await matFetch(pageUrl);
+    const embed = matEmbedFromPage(html);
+    matEpCache.set(cacheKey, { at: Date.now(), embed });
+    return embed;
+  } catch {
+    matEpCache.set(cacheKey, { at: Date.now(), embed: null });
+    return null;
+  }
+}
+
+// ── Per-(slug, ep) streams cache — the watch page costs 1-2 s, replays and
+//    next-episode-return trips should be instant. Stale copy is served when
+//    the upstream flaps so a 5-minute-old chain beats a dead error screen.
+export interface DramaStreamsPayloadData {
+  sources: VideoSource[];
+  providersTried: { provider: string; ok: boolean; error?: string }[];
+  episodeTitle?: string;
+}
+
+const streamsCache = new Map<string, { at: number; data: DramaStreamsPayloadData }>();
+const STREAMS_TTL = 8 * 60_000;
+
+function episodeMatches(raw: RawEpisode, ep: number): boolean {
+  // The payload's own `number` field is authoritative (epUrls no longer carry
+  // a parseable episode-… segment — they point at MyAsianTV).
+  if (typeof raw.number === 'number' && Number.isFinite(raw.number)) {
+    return Math.abs(raw.number - ep) < 0.001;
+  }
+  const m = (raw.epUrl || '').match(/episode-([0-9]+(?:-[0-9]+)?)/);
+  return !!m && m[1].replace(/-/g, '.') === String(ep);
+}
+
 /** Episode sources — ordered fallback chain:
  *  1. pre-resolved direct HLS (hlsproxy) when the SSR worker managed it
- *  2. every hoster embed the episode carries (kissasian/dood/streamtape/…) */
+ *  2. every hoster embed the episode carries (vidmoly/streamtape/mixdrop/asianctv…)
+ *  3. MyAsianTV's own embedded player (zumivids) for the same episode */
 export async function dramaStreams(
   slug: string,
-  ep: number
-): Promise<{ sources: VideoSource[]; providersTried: { provider: string; ok: boolean; error?: string }[]; episodeTitle?: string }> {
+  ep: number,
+  opts: { providers?: string[] } = {}
+): Promise<DramaStreamsPayloadData> {
+  const enabled = new Set(opts.providers || ['dc-hls', 'dc-embeds', 'mat']);
+  const cacheKey = `${slug}|${ep}|${[...enabled].sort().join(',')}`;
+  const hit = streamsCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < STREAMS_TTL) return hit.data;
+
   const sources: VideoSource[] = [];
   const providersTried: { provider: string; ok: boolean; error?: string }[] = [];
   const html = await dcFetchHtml(`/drama/${encodeURIComponent(slug)}/episode-${ep}`);
   const state = parseNgState(html);
 
   // (1) pre-resolved direct stream — /v1/drama/get-stream-url response cache
-  const resolved = findEntry(state, '/v1/drama/get-stream-url');
-  const rSources =
-    (resolved?.b as { sources?: { url?: string; isM3U8?: boolean; quality?: string }[] } | undefined)?.sources || [];
-  for (const s of rSources) {
-    if (!s.url) continue;
-    // Play straight from the user's browser — /api/proxy would face the
-    // Cloudflare challenge our server cannot pass.
-    const url = s.url.startsWith('http') ? s.url : absEmbedUrl(s.url);
-    sources.push({
+  if (enabled.has('dc-hls')) {
+    const resolved = findEntry(state, '/v1/drama/get-stream-url');
+    const rSources =
+      (resolved?.b as { sources?: { url?: string; isM3U8?: boolean; quality?: string }[] } | undefined)?.sources || [];
+    for (const s of rSources) {
+      if (!s.url) continue;
+      // Played straight from the user's browser only when CORS allows it —
+      // otherwise the Player routes it through /api/proxy (server bandwidth).
+      const url = s.url.startsWith('http') ? s.url : absEmbedUrl(s.url);
+      sources.push({
+        provider: 'dc-hls',
+        url,
+        quality: s.quality || 'auto',
+        isM3U8: s.isM3U8 ?? url.includes('.m3u8'),
+        note: 'Direct stream',
+      });
+      break; // one direct source is enough — embeds are the fallback depth
+    }
+    providersTried.push({
       provider: 'dc-hls',
-      url,
-      quality: s.quality || 'auto',
-      isM3U8: s.isM3U8 ?? url.includes('.m3u8'),
-      note: 'Direct stream',
+      ok: sources.length > 0,
+      error: sources.length ? undefined : 'no pre-resolved stream',
     });
-    break; // one direct source is enough — embeds are the fallback depth
   }
-  providersTried.push({ provider: 'dc-hls', ok: sources.length > 0, error: sources.length ? undefined : 'no pre-resolved stream' });
 
   // (2) hoster embeds from the detail payload's matching episode
   const detail = findEntry(state, '/v1/drama/detail');
-  const rawEps = (detail?.b as RawDetail | undefined)?.episodes || [];
-  const want = String(ep); // "8" or "16.1" — compare in dotted form
-  const epRaw = rawEps.find((e) => {
-    const m = (e.epUrl || '').match(/episode-([0-9]+(?:-[0-9]+)?)/);
-    return m && m[1].replace(/-/g, '.') === want;
-  });
+  const raw = detail?.b as RawDetail | undefined;
+  const rawEps = raw?.episodes || [];
+  const epRaw = rawEps.find((e) => episodeMatches(e, ep));
   const streamUrls = (epRaw?.streamUrls || []) as { source?: string; url?: string }[];
-  for (const s of streamUrls) {
-    if (!s.url) continue;
-    const host = s.source || 'mirror';
-    sources.push({
-      provider: `dc-embed:${host}`,
-      url: `embed:${absEmbedUrl(s.url)}`,
-      quality: 'embed',
-      isM3U8: false,
-      note: 'Mirror player',
+  if (enabled.has('dc-embeds')) {
+    for (const s of streamUrls) {
+      if (!s.url) continue;
+      const host = s.source || 'mirror';
+      sources.push({
+        provider: `dc-embed:${host}`,
+        url: `embed:${absEmbedUrl(s.url)}`,
+        quality: 'embed',
+        isM3U8: false,
+        note: 'Mirror player',
+      });
+    }
+    providersTried.push({
+      provider: 'dc-embeds',
+      ok: streamUrls.length > 0,
+      error: streamUrls.length ? undefined : 'no embeds on episode',
     });
   }
-  providersTried.push({ provider: 'dc-embeds', ok: streamUrls.length > 0, error: streamUrls.length ? undefined : 'no embeds on episode' });
 
-  return { sources, providersTried, episodeTitle: epRaw?.title || undefined };
+  // (3) MyAsianTV — the same episode on the independent mirror. Runs in
+  //     parallel with nothing upstream of it (the epUrl comes from this very
+  //     page), but a hard 9 s budget keeps it from stalling the response; a
+  //     miss here just leaves the dramacool embeds as the fallback depth.
+  if (enabled.has('mat')) {
+    const matUrl = epRaw?.epUrl || null;
+    const embed = await matEpisodeEmbed(raw?.name || slug, ep, matUrl);
+    if (embed) {
+      sources.push({
+        provider: 'mat',
+        url: `embed:${embed}`,
+        quality: 'embed',
+        isM3U8: false,
+        note: 'MyAsianTV player',
+      });
+    }
+    providersTried.push({
+      provider: 'mat',
+      ok: !!embed,
+      error: embed ? undefined : 'no mirror match',
+    });
+  }
+
+  // Mirror tiers overlap (MyAsianTV often re-embeds the same hoster) — drop
+  // exact-URL duplicates so a dead hoster never eats two failover steps.
+  const seen = new Set<string>();
+  const deduped = sources.filter((s) => {
+    const k = s.url.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  const data: DramaStreamsPayloadData = { sources: deduped, providersTried, episodeTitle: epRaw?.title || undefined };
+  streamsCache.set(cacheKey, { at: Date.now(), data });
+  return data;
 }
