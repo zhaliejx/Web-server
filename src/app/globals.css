@@ -56,61 +56,95 @@
 
 /* ── Accent system — one variable drives every highlight in the app ──────────
    The default (no data-aj-theme attribute) is Ember orange. The alpha tones
-   are derived with color-mix() so themes only override the three base hues. */
+   are derived with color-mix() so themes only override the base hues.
+   Old-Safari support: every color-mix() declaration is PRECEDED by an
+   equivalent rgba() fallback built on --aj-acc-rgb. Safari < 16.2 drops the
+   color-mix() line (invalid) and keeps the rgba line; modern browsers use
+   the color-mix() line (later in the cascade wins). */
 :root {
   --aj-acc: #ff7a1a;
+  --aj-acc-rgb: 255, 122, 26;
   --aj-acc-hi: #ffb37a;
+  --aj-acc-hi-rgb: 255, 179, 122;
   --aj-acc-hi2: #ff8d3d;
 
+  --aj-acc-08: rgba(var(--aj-acc-rgb), 0.08);
   --aj-acc-08: color-mix(in srgb, var(--aj-acc) 8%, transparent);
+  --aj-acc-10: rgba(var(--aj-acc-rgb), 0.1);
   --aj-acc-10: color-mix(in srgb, var(--aj-acc) 10%, transparent);
+  --aj-acc-12: rgba(var(--aj-acc-rgb), 0.12);
   --aj-acc-12: color-mix(in srgb, var(--aj-acc) 12%, transparent);
+  --aj-acc-15: rgba(var(--aj-acc-rgb), 0.15);
   --aj-acc-15: color-mix(in srgb, var(--aj-acc) 15%, transparent);
+  --aj-acc-20: rgba(var(--aj-acc-rgb), 0.2);
   --aj-acc-20: color-mix(in srgb, var(--aj-acc) 20%, transparent);
+  --aj-acc-25: rgba(var(--aj-acc-rgb), 0.25);
   --aj-acc-25: color-mix(in srgb, var(--aj-acc) 25%, transparent);
+  --aj-acc-35: rgba(var(--aj-acc-rgb), 0.35);
   --aj-acc-35: color-mix(in srgb, var(--aj-acc) 35%, transparent);
+  --aj-acc-40: rgba(var(--aj-acc-rgb), 0.4);
   --aj-acc-40: color-mix(in srgb, var(--aj-acc) 40%, transparent);
+  --aj-acc-50: rgba(var(--aj-acc-rgb), 0.5);
   --aj-acc-50: color-mix(in srgb, var(--aj-acc) 50%, transparent);
+  --aj-acc-60: rgba(var(--aj-acc-rgb), 0.6);
   --aj-acc-60: color-mix(in srgb, var(--aj-acc) 60%, transparent);
+  --aj-acc-80: rgba(var(--aj-acc-rgb), 0.8);
   --aj-acc-80: color-mix(in srgb, var(--aj-acc) 80%, transparent);
+  --aj-acc-hi-80: rgba(var(--aj-acc-hi-rgb), 0.8);
   --aj-acc-hi-80: color-mix(in srgb, var(--aj-acc-hi) 80%, transparent);
+  --aj-acc-shadow: rgba(var(--aj-acc-rgb), 0.4);
   --aj-acc-shadow: color-mix(in srgb, var(--aj-acc) 40%, transparent);
+  --aj-acc-deep: rgba(var(--aj-acc-rgb), 0.62);
   --aj-acc-deep: color-mix(in srgb, var(--aj-acc) 62%, #000);
 }
 
 [data-aj-theme='crimson'] {
   --aj-acc: #e50914;
+  --aj-acc-rgb: 229, 9, 20;
   --aj-acc-hi: #ff8f96;
+  --aj-acc-hi-rgb: 255, 143, 150;
   --aj-acc-hi2: #ff2d38;
 }
 [data-aj-theme='violet'] {
   --aj-acc: #a855f7;
+  --aj-acc-rgb: 168, 85, 247;
   --aj-acc-hi: #d8b4fe;
+  --aj-acc-hi-rgb: 216, 180, 254;
   --aj-acc-hi2: #c084fc;
 }
 [data-aj-theme='azure'] {
   --aj-acc: #3b82f6;
+  --aj-acc-rgb: 59, 130, 246;
   --aj-acc-hi: #a5c8ff;
+  --aj-acc-hi-rgb: 165, 200, 255;
   --aj-acc-hi2: #60a5fa;
 }
 [data-aj-theme='mint'] {
   --aj-acc: #10b981;
+  --aj-acc-rgb: 16, 185, 129;
   --aj-acc-hi: #7ce8c3;
+  --aj-acc-hi-rgb: 124, 232, 195;
   --aj-acc-hi2: #34d399;
 }
 [data-aj-theme='rose'] {
   --aj-acc: #f43f5e;
+  --aj-acc-rgb: 244, 63, 94;
   --aj-acc-hi: #fda4af;
+  --aj-acc-hi-rgb: 253, 164, 175;
   --aj-acc-hi2: #fb7185;
 }
 [data-aj-theme='gold'] {
   --aj-acc: #d9a406;
+  --aj-acc-rgb: 217, 164, 6;
   --aj-acc-hi: #f3d060;
+  --aj-acc-hi-rgb: 243, 208, 96;
   --aj-acc-hi2: #eab308;
 }
 [data-aj-theme='platinum'] {
   --aj-acc: #e2e8f0;
+  --aj-acc-rgb: 226, 232, 240;
   --aj-acc-hi: #ffffff;
+  --aj-acc-hi-rgb: 255, 255, 255;
   --aj-acc-hi2: #f8fafc;
 }
 
@@ -229,4 +263,24 @@ body {
   .aj-kenburns {
     animation: none;
   }
+}
+
+/* ── Lite mode — old/weak devices (iPad Air 2 class) ─────────────────────────
+   aj-lite is set by lite.ts on <html> when the device looks underpowered.
+   backdrop-filter is the single most expensive effect on A8X-class GPUs and
+   is plastered over the top bar, bottom nav and modals — drop it there; also
+   stop the perpetual ken-burns repaints and card-hover transform layers. */
+.aj-lite [class*='backdrop-blur'] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.aj-lite .aj-kenburns {
+  animation: none;
+}
+.aj-lite .aj-card-hover {
+  transition: none;
+}
+.aj-lite .aj-card-hover:hover {
+  transform: none;
+  box-shadow: none;
 }

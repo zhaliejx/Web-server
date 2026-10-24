@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { MangaHistoryEntry, MangaItem } from './types';
+import { safeLocalStorage } from './safeStorage';
 
 // ── Reading history ──────────────────────────────────────────────────────────
 interface MangaHistoryState {
@@ -45,7 +46,7 @@ export const useMangaHistory = create<MangaHistoryState>()(
         }),
       clear: () => set({ entries: {} }),
     }),
-    { name: 'ajest.manga.history.v1', storage: createJSONStorage(() => localStorage) }
+    { name: 'ajest.manga.history.v1', storage: createJSONStorage(() => safeLocalStorage) }
   )
 );
 
@@ -71,7 +72,7 @@ function mangaListStore(name: string) {
           ),
         has: (id) => get().items.some((x) => x.id === id),
       }),
-      { name, storage: createJSONStorage(() => localStorage) }
+      { name, storage: createJSONStorage(() => safeLocalStorage) }
     )
   );
 }

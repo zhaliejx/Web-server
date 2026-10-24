@@ -55,7 +55,24 @@ function DramaContinueRow({ onOpen, onPlay }: { onOpen: (d: DramaItem) => void; 
 }
 
 // ── Drama home ───────────────────────────────────────────────────────────────
-export function DramaHome({ onOpen, onPlay }: { onOpen: (d: DramaItem) => void; onPlay: (d: DramaItem, ep: number) => void }) {
+interface DramaHomeProps {
+  onOpen: (d: DramaItem) => void;
+  onPlay: (d: DramaItem, ep: number) => void;
+  /** Deep-link into the Explore view (optionally with a preset) */
+  onExplore: (preset?: { country?: string; genre?: string; status?: string; sort?: string; title?: string }) => void;
+}
+
+/** Country quick-access strip — one tap into a filtered Explore grid. */
+const QUICK_COUNTRIES: { label: string; country: string }[] = [
+  { label: 'K-Drama', country: 'South Korea' },
+  { label: 'C-Drama', country: 'China' },
+  { label: 'J-Drama', country: 'Japan' },
+  { label: 'Lakorn', country: 'Thailand' },
+  { label: 'Hong Kong', country: 'Hong Kong' },
+  { label: 'Taiwan', country: 'Taiwan' },
+];
+
+export function DramaHome({ onOpen, onPlay, onExplore }: DramaHomeProps) {
   const [sections, setSections] = useState<{ title: string; items: DramaItem[] }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +94,41 @@ export function DramaHome({ onOpen, onPlay }: { onOpen: (d: DramaItem) => void; 
 
   return (
     <div className="relative z-10 space-y-9 pb-24 pt-6 md:space-y-11">
+      {/* Country quick access — straight into filtered Explore grids */}
+      <section className="aj-rise" aria-label="Browse dramas by country">
+        <div className="mb-3 flex items-center justify-between px-4 md:px-8">
+          <div className="flex items-center gap-2.5">
+            <span className="text-[var(--aj-acc)]">
+              <IconFlame size={19} />
+            </span>
+            <h2 className="text-[17px] md:text-xl font-bold tracking-tight text-white/95">Browse by Country</h2>
+          </div>
+          <button
+            onClick={() => onExplore({ title: 'All Dramas' })}
+            className="rounded-full bg-[var(--aj-acc-12)] px-3.5 py-1.5 text-[11.5px] font-bold text-[var(--aj-acc-hi)] ring-1 ring-[var(--aj-acc-25)] transition hover:bg-[var(--aj-acc-25)]"
+          >
+            See all
+          </button>
+        </div>
+        <div className="flex gap-2 overflow-x-auto px-4 pb-1 no-scrollbar md:px-8">
+          {QUICK_COUNTRIES.map((c) => (
+            <button
+              key={c.country}
+              onClick={() => onExplore({ country: c.country, title: c.label })}
+              className="shrink-0 rounded-full border border-white/[0.09] bg-white/[0.04] px-4 py-2 text-[12px] font-bold text-white/70 transition hover:border-[var(--aj-acc-40)] hover:bg-[var(--aj-acc-12)] hover:text-white"
+            >
+              {c.label}
+            </button>
+          ))}
+          <button
+            onClick={() => onExplore({ status: 'Ongoing', title: 'Ongoing Now' })}
+            className="shrink-0 rounded-full border border-white/[0.09] bg-white/[0.04] px-4 py-2 text-[12px] font-bold text-white/70 transition hover:border-[var(--aj-acc-40)] hover:bg-[var(--aj-acc-12)] hover:text-white"
+          >
+            Ongoing
+          </button>
+        </div>
+      </section>
+
       <DramaContinueRow onOpen={onOpen} onPlay={onPlay} />
       {loading && !sections.length ? (
         <div className="flex flex-col items-center justify-center gap-3 py-20 text-white/50">
@@ -99,6 +151,7 @@ export function DramaHome({ onOpen, onPlay }: { onOpen: (d: DramaItem) => void; 
             items={s.items.map(dramaAsCard)}
             onOpen={(a) => onOpen(sectionItem(s, a))}
             icon={i === 1 ? <IconFlame size={19} /> : i === 2 ? <IconSparkle size={19} /> : undefined}
+            onSeeAll={() => onExplore({ title: s.title })}
           />
         ))
       )}

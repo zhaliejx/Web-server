@@ -19,7 +19,7 @@
 
 import type { DramaDetail, DramaEpisode, DramaItem, VideoSource } from './types';
 
-const DC_HOSTS = ['https://dramacool9.rest', 'https://dramacool.lat'];
+const DC_HOSTS = ['https://dramacool9.rest', 'https://dramacool.rest', 'https://dramacool.lat'];
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36';
 
@@ -234,6 +234,54 @@ export async function dramaDetail(slug: string): Promise<DramaDetail> {
     casts: (raw.casts || []).map((c) => c.name || '').filter(Boolean).slice(0, 12),
     genres: (raw.genre || raw.genres || []).map((g) => g.name || '').filter(Boolean),
     episodes,
+  };
+}
+
+// ── Explore — the /explore SSR page exposes /v1/drama/list: every drama with
+// country / genre / status / type / year filters, sort and real pagination
+// (30 per page). Verified live param values:
+//   country=South Korea|China|Japan|Thailand|Hong Kong|Taiwan|Philippines
+//   genre=<Taxonomy name, e.g. Romance|Comedy|Action>
+//   status=Completed|Ongoing|Upcoming
+//   type=TVSeries|Movie|Anime|Hollywood
+//   year=<yyyy>   sort=most_popular|recent|top_rated   page=<n>
+
+export interface DramaExploreFilters {
+  country?: string;
+  genre?: string;
+  status?: string;
+  type?: string;
+  year?: string;
+  sort?: string;
+  page?: number;
+}
+
+export async function dramaExplore(
+  f: DramaExploreFilters
+): Promise<{ items: DramaItem[]; pageInfo: { total: number; currentPage: number; totalPages: number; hasNext: boolean } }> {
+  const q = new URLSearchParams();
+  if (f.country) q.set('country', f.country);
+  if (f.genre) q.set('genre', f.genre);
+  if (f.status) q.set('status', f.status);
+  if (f.type) q.set('type', f.type);
+  if (f.year) q.set('year', f.year);
+  q.set('sort', f.sort || 'most_popular');
+  q.set('page', String(Math.max(1, f.page || 1)));
+  const html = await dcFetchHtml(`/explore?${q.toString()}`);
+  const state = parseNgState(html);
+  const entry = findEntry(state, '/v1/drama/list');
+  const body = entry?.b as
+    | { currentPage?: number; hasNext?: boolean; totalPages?: number; body?: RawListItem[] }
+    | undefined;
+  const items = (body?.body || []).map(mapDramaItem).filter((x): x is DramaItem => !!x);
+  return {
+    items,
+    pageInfo: {
+      total: items.length,
+      currentPage: body?.currentPage || Math.max(1, f.page || 1),
+      totalPages: body?.totalPages || 1,
+      hasNext: !!body?.hasNext,
+    },
   };
 }
 

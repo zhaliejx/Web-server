@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { DramaHistoryEntry, DramaItem } from './types';
+import { safeLocalStorage } from './safeStorage';
 
 interface DramaHistoryState {
   entries: Record<string, DramaHistoryEntry>;
@@ -43,7 +44,7 @@ export const useDramaHistory = create<DramaHistoryState>()(
         }),
       clear: () => set({ entries: {} }),
     }),
-    { name: 'ajest.drama.history.v1', storage: createJSONStorage(() => localStorage) }
+    { name: 'ajest.drama.history.v1', storage: createJSONStorage(() => safeLocalStorage) }
   )
 );
 
@@ -69,7 +70,7 @@ function dramaListStore(name: string) {
           ),
         has: (slug) => get().items.some((x) => x.slug === slug),
       }),
-      { name, storage: createJSONStorage(() => localStorage) }
+      { name, storage: createJSONStorage(() => safeLocalStorage) }
     )
   );
 }

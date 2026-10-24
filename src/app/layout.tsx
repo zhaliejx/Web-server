@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+// Old-Safari runtime polyfills — must be the first client module to load.
+import "./polyfills";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 

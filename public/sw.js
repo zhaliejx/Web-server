@@ -1,10 +1,14 @@
 /* Ajest service worker — minimal offline shell + installability.
    Strategy:
-   • Navigations: network-first, fall back to cached shell.
+   • Navigations: network-first, fall back to cached shell (only GOOD responses
+     are ever cached — a stale shell referencing deleted /_next chunks is the
+     classic "app stuck in loading on my iPad" bug).
    • Static assets (/_next/static, icons): cache-first.
-   • /api/*: always network (live anime data + streams are never cached). */
+   • /api/*: always network (live anime data + streams are never cached).
+   CACHE is version-bumped on every deploy-affecting shell change so old
+   caches are wiped on activate. */
 
-const CACHE = 'ajest-v2';
+const CACHE = 'ajest-v3';
 const PRECACHE = ['/', '/ajest-icon.svg', '/ajest-maskable.svg', '/logo.svg', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
@@ -42,8 +46,12 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('/', copy));
+          // Cache only successful same-origin HTML — error pages, opaque and
+          // partial responses must never poison the offline shell.
+          if (res && res.ok && res.type === 'basic' && (res.headers.get('content-type') || '').includes('text/html')) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put('/', copy));
+          }
           return res;
         })
         .catch(() => caches.match('/'))

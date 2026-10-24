@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AnimeCard, HistoryEntry } from './types';
+import { safeLocalStorage } from './safeStorage';
 
 // ── History ──────────────────────────────────────────────────────────────────
 interface HistoryState {
@@ -49,7 +50,7 @@ export const useHistory = create<HistoryState>()(
         }),
       clear: () => set({ entries: {} }),
     }),
-    { name: 'ajest.history.v1', storage: createJSONStorage(() => localStorage) }
+    { name: 'ajest.history.v1', storage: createJSONStorage(() => safeLocalStorage) }
   )
 );
 
@@ -76,7 +77,7 @@ export const useLiked = create<LikedState>()(
         ),
       has: (id) => get().items.some((x) => x.id === id),
     }),
-    { name: 'ajest.liked.v1', storage: createJSONStorage(() => localStorage) }
+    { name: 'ajest.liked.v1', storage: createJSONStorage(() => safeLocalStorage) }
   )
 );
 
@@ -99,6 +100,6 @@ export const useWatchLater = create<LaterState>()(
         ),
       has: (id) => get().items.some((x) => x.id === id),
     }),
-    { name: 'ajest.later.v1', storage: createJSONStorage(() => localStorage) }
+    { name: 'ajest.later.v1', storage: createJSONStorage(() => safeLocalStorage) }
   )
 );

@@ -10,7 +10,62 @@ chapter first.
 
 ---
 
-## Chapter 5 — Manga, Manhwa & Manhua Mode (current)
+## Chapter 6 — Old Devices & Drama Navigation (current)
+
+The app now survives a 2014 iPad Air 2 and the drama section got real
+navigation. Fixes for "stuck in loading on my iPad" + "fix drama navigation" +
+"better drama sites":
+
+**Old-device rescue (iPad Air 2 / Safari ≤ 15.3)**
+- **Syntax**: a `browserslist` (safari ≥ 12 / ios_saf ≥ 12) now forces SWC to
+  transpile every modern JS construct down to old Safari — chunks audited, no
+  optional chaining/nullish coalescing left.
+- **Runtime APIs**: `polyfills.ts` (first import in the root layout) patches
+  `globalThis`, `Promise.allSettled`, `replaceAll`, `.at()`, `Object.hasOwn`,
+  `findLast`, `crypto.randomUUID`, `structuredClone` on old Safari.
+- **Accent colors**: the whole alpha-tone system was `color-mix()`-only
+  (Safari 16.2+) — on iPadOS 15 every tinted surface went transparent. Each
+  tone now has an equivalent rgba() fallback line that old browsers keep.
+- **Storage**: `safeLocalStorage` — in Safari Private Browsing, every zustand
+  persist store now silently falls back to memory instead of throwing.
+- **No more eternal spinner**: all client fetches are 20 s timeout-guarded,
+  and an error boundary turns any render crash into an honest reload card.
+- **Service worker**: cache bumped to v3; failed navigations can no longer
+  cache non-HTML responses, so a stale shell can never reference deleted
+  chunks again (the classic "works on desktop, bricked on iPad" bug).
+- **Lite mode**: low-core/low-memory devices get `aj-lite` on <html> —
+  backdrop-blur, ken-burns and hover transforms are dropped (A8X GPUs choke
+  on backdrop-filter), hls.js buffers shrink.
+- **Boot is 5× lighter**: the Player (+ hls.js, ~600 KB) and MangaReader moved
+  to lazy chunks — the boot bundle is ~120 KB; playback chunks warm up in the
+  background after mount.
+
+**Episode playback fixes**
+- **Native HLS on Apple devices** — iOS/iPadOS/macOS Safari now uses the
+  device's own HLS player instead of hls.js/MSE, which fixes HEVC-variant
+  episodes that used to hang in loading forever (Safari's MSE can't decode
+  them; native can) and is far lighter on old hardware.
+- **Dead-embed watchdog** — drama hoster/Kaizen iframes that never fire
+  `load` now fail over to the next source after 14 s instead of showing a
+  black frame forever.
+
+**Drama navigation & sources**
+- **Blank-screen bug fixed**: reloading the app in drama (or manga) mode used
+  to render an empty main area — the view now initializes to the saved
+  medium's home.
+- **Drama nav completed**: Home / **Explore** / Search / **My Dramas**
+  (continue-watching library with resume + remove).
+- **Drama Explore** — the drama twin of anime Browse: country / genre /
+  status chips + sort (most popular / recently updated / top rated), 30 per
+  page with real pagination via the dramacool `/explore` endpoint
+  (new `/api/drama/explore` route). Home gained a "Browse by Country" strip
+  (K-Drama, C-Drama, J-Drama, Lakorn…) and every rail has a See-all.
+- **Sources**: a third mirror (`dramacool.rest`) joined the dramacool9
+  failover chain.
+
+---
+
+## Chapter 5 — Manga, Manhwa & Manhua Mode
 
 Ajest is no longer anime-only. A new SVG **Anime ⇄ Manga switch** (TV icon /
 open-book icon, top bar on every screen) flips the entire app between its two

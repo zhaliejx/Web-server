@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import type { AnimeCard as AnimeCardType, StreamsPayload, VideoSource } from '@/lib/ajest/types';
+import { liteHlsConfig } from '@/lib/ajest/lite';
 import {
   IconPlay,
   IconPause,
@@ -189,6 +190,11 @@ export default function Player({
   const [ytEmbed, setYtEmbed] = useState<{ id: string; note?: string; provider: string } | null>(null);
   const [extEmbed, setExtEmbed] = useState<{ url: string; provider: string; note?: string } | null>(null);
   const extNextRef = useRef<(() => void) | null>(null);
+  // Dead-embed watchdog — a hoster iframe (Kaizen, drama mirrors) that never
+  // even fires `load` means the host is unreachable/blocked: fail over to the
+  // next source instead of showing a black frame forever.
+  const embedLoadedRef = useRef(false);
+  const extWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Race guard for async embed validation — only act while THIS embed is live
   const activeEmbedUrlRef = useRef<string | null>(null);
   // ── ani.pm partner API (postMessage) — watch-time + auto-resume ──
@@ -312,6 +318,10 @@ export default function Player({
         setYtEmbed(null);
         ytActiveRef.current = false;
         setExtEmbed(null);
+        if (extWatchdogRef.current) {
+          clearTimeout(extWatchdogRef.current);
+          extWatchdogRef.current = null;
+        }
         setPhase('error');
       }
     };
@@ -322,6 +332,10 @@ export default function Player({
       hlsRef.current = null;
     }
     if (watchdogRef.current) clearTimeout(watchdogRef.current);
+    if (extWatchdogRef.current) {
+      clearTimeout(extWatchdogRef.current);
+      extWatchdogRef.current = null;
+    }
     if (ytWatchdogRef.current) {
       clearTimeout(ytWatchdogRef.current);
       ytWatchdogRef.current = null;
@@ -350,6 +364,14 @@ export default function Player({
       anipmSeekOkRef.current = false;
       anipmPausedRef.current = false;
       setAnipmSeekFailed(false);
+      // Arm the dead-embed watchdog — if the iframe never loads, move on.
+      embedLoadedRef.current = false;
+      if (extWatchdogRef.current) clearTimeout(extWatchdogRef.current);
+      extWatchdogRef.current = setTimeout(() => {
+        if (!embedLoadedRef.current && activeEmbedUrlRef.current === embedUrl) {
+          extNextRef.current?.();
+        }
+      }, 14000);
       extNextRef.current = () => nextSource(`${providerLabel(src.provider)} unavailable — switching provider…`);
       // Estimated runtime (metadata minutes) — feeds the wall-clock fallback
       // tracker and the progress bar when the embed can't report real time.
@@ -466,10 +488,22 @@ export default function Player({
       nextSource(`${providerLabel(src.provider)} stream failed — switching to next provider…`);
     };
 
-    if (src.isM3U8 && Hls.isSupported()) {
+    // Native HLS on Apple devices — Safari's own player handles every codec the
+    // device supports (incl. HEVC variants MSE on iPadOS ≤ 17 silently can't),
+    // uses hardware decode and skips hls.js's memory footprint entirely. On
+    // such devices some episodes used to hang in "loading" forever: hls.js
+    // won the isSupported() check, then hit a codec/MSE wall it never recovers
+    // from. Desktop browsers keep hls.js (no native HLS there).
+    const ua = navigator.userAgent || '';
+    const isApple = /iP(hone|ad|od)/.test(ua) || (/Mac/.test(ua) && navigator.maxTouchPoints > 1) || /^((?!chrome|android).)*safari/i.test(ua);
+    const nativeHls = isApple && typeof video.canPlayType === 'function' && video.canPlayType('application/vnd.apple.mpegurl') !== '';
+    const liteCfg = liteHlsConfig();
+
+    if (src.isM3U8 && Hls.isSupported() && !nativeHls) {
       const hls = new Hls({
-        maxBufferLength: 40,
-        maxMaxBufferLength: 90,
+        maxBufferLength: liteCfg ? liteCfg.maxBufferLength : 40,
+        maxMaxBufferLength: liteCfg ? liteCfg.maxMaxBufferLength : 90,
+        maxBufferSize: liteCfg ? liteCfg.maxBufferSize : 60,
         fragLoadingTimeOut: 14000,
         manifestLoadingTimeOut: 12000,
         lowLatencyMode: false,
@@ -519,7 +553,6 @@ export default function Player({
     }
 
   }, [onProgress, bumpControls, anime, anipmPost]);
-
   // Register the attach implementation for recursive fallback calls
   useEffect(() => {
     attachRef.current = attachSource;
@@ -799,6 +832,7 @@ export default function Player({
       if (hideTimer.current) clearTimeout(hideTimer.current);
       if (ytWatchdogRef.current) clearTimeout(ytWatchdogRef.current);
       if (ytHintTimerRef.current) clearTimeout(ytHintTimerRef.current);
+      if (extWatchdogRef.current) clearTimeout(extWatchdogRef.current);
     };
   }, []);
 
@@ -1003,6 +1037,13 @@ export default function Player({
             allowFullScreen
             referrerPolicy="origin"
             title={`Ajest — ${providerLabel(extEmbed.provider)}`}
+            onLoad={() => {
+              embedLoadedRef.current = true;
+              if (extWatchdogRef.current) {
+                clearTimeout(extWatchdogRef.current);
+                extWatchdogRef.current = null;
+              }
+            }}
           />
           {/* ani.pm redirect shield — their player refuses sandboxed frames
               ("This player can't run in a sandboxed frame"), so there is no

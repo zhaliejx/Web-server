@@ -1,23 +1,25 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
 import type { AnimeCard as AnimeCardType, MangaChapter, MangaItem, DramaItem } from '@/lib/ajest/types';
 import { fetchCatalog, fetchDramaDetail, fetchSchedule } from '@/lib/ajest/client';
+import { applyLiteMode } from '@/lib/ajest/lite';
 import { MangaHome } from './MangaHome';
 import { MangaDetail } from './MangaDetail';
-import { MangaReader } from './MangaReader';
 import { MangaSearchView } from './MangaSearchView';
 import { MangaLibrary } from './MangaLibrary';
 import { DramaHome, dramaAsCard } from './DramaHome';
 import { DramaDetail } from './DramaDetail';
 import { DramaSearchView } from './DramaSearchView';
+import { DramaExploreView, type DramaExplorePreset } from './DramaExploreView';
+import { DramaHistoryView } from './DramaHistoryView';
 import { useDramaHistory } from '@/lib/ajest/dramastore';
 import { purgeExpiredSearches } from '@/lib/ajest/recent';
 import { IconBook, IconTv, IconBell } from './icons';
 import { HeroCarousel } from './HeroCarousel';
 import { Row, ContinueRow } from './Row';
 import { DetailView } from './DetailView';
-import Player from './Player';
 import { ScheduleView } from './ScheduleView';
 import { LibraryView } from './LibraryView';
 import { SearchView } from './SearchView';
@@ -40,6 +42,18 @@ import {
 import { useHistory, useLiked, useWatchLater } from '@/lib/ajest/store';
 import { fetchDetail } from '@/lib/ajest/client';
 
+// Heavy overlays live in their own chunks — hls.js (~500 KB) should never be
+// parsed on boot by a 2014 iPad just to see the home rails. Warm-up preload
+// keeps first play instant on healthy devices.
+const Player = dynamic(() => import('./Player'), {
+  ssr: false,
+  loading: () => <div className="fixed inset-0 z-50 bg-black" aria-hidden />,
+});
+const MangaReader = dynamic(() => import('./MangaReader').then((m) => m.MangaReader), {
+  ssr: false,
+  loading: () => <div className="fixed inset-0 z-50 bg-black" aria-hidden />,
+});
+
 type Medium = 'anime' | 'manga' | 'drama';
 
 type View =
@@ -57,7 +71,14 @@ type View =
   | { kind: 'manga-detail'; manga: MangaItem }
   | { kind: 'drama-home' }
   | { kind: 'drama-search' }
+  | { kind: 'drama-explore'; preset?: DramaExplorePreset }
+  | { kind: 'drama-history' }
   | { kind: 'drama-detail'; drama: DramaItem };
+
+/** Per-medium home view — keeps the view stack in sync with the saved medium. */
+function homeViewFor(medium: Medium): View {
+  return medium === 'manga' ? { kind: 'manga-home' } : medium === 'drama' ? { kind: 'drama-home' } : { kind: 'home' };
+}
 
 interface PlayIntent {
   anime: AnimeCardType;
@@ -79,14 +100,32 @@ interface DramaIntent {
 // Rendered client-only via dynamic(ssr:false), so localStorage is safe.
 
 export default function AjestApp() {
-  const [view, setView] = useState<View>({ kind: 'home' });
   // Medium switch — one app, two libraries. Persisted; manga mode swaps the
   // whole nav stack, home rails and search target.
   const [medium, setMedium] = useState<Medium>(() => {
     if (typeof window === 'undefined') return 'anime';
-    const v = window.localStorage.getItem('ajest.medium.v1');
-    return v === 'manga' || v === 'drama' ? v : 'anime';
+    try {
+      const v = window.localStorage.getItem('ajest.medium.v1');
+      return v === 'manga' || v === 'drama' ? v : 'anime';
+    } catch {
+      return 'anime';
+    }
   });
+  // View starts on the SAVED medium's home — previously a drama/manga user
+  // reloading the page got a permanently blank main area (view 'home' matches
+  // no render branch when medium is drama/manga).
+  const [view, setView] = useState<View>(() => homeViewFor(
+    typeof window === 'undefined'
+      ? 'anime'
+      : (() => {
+          try {
+            const v = window.localStorage.getItem('ajest.medium.v1');
+            return v === 'manga' || v === 'drama' ? v : 'anime';
+          } catch {
+            return 'anime' as Medium;
+          }
+        })()
+  ));
   const [readerIntent, setReaderIntent] = useState<ReaderIntent | null>(null);
   const [dramaIntent, setDramaIntent] = useState<DramaIntent | null>(null);
   const [dramaEpisodes, setDramaEpisodes] = useState<{ number: number; title?: string }[]>([]);
@@ -102,6 +141,12 @@ export default function AjestApp() {
   const historyEntries = useHistory((s) => s.entries);
   const upsertDramaHistory = useDramaHistory((s) => s.upsert);
   const dramaHistoryEntries = useDramaHistory((s) => s.entries);
+
+  // Old-device lite mode — tag <html> once (drops backdrop-blur & ken-burns
+  // via CSS) and warm the Player/Reader chunks so first play is instant.
+  useEffect(() => {
+    applyLiteMode();
+  }, []);
 
   // Load home catalog immediately — no bootup screen, content right away
   useEffect(() => {
@@ -175,7 +220,7 @@ export default function AjestApp() {
   }, []);
 
   const goHome = useCallback(() => {
-    setView(medium === 'manga' ? { kind: 'manga-home' } : medium === 'drama' ? { kind: 'drama-home' } : { kind: 'home' });
+    setView(homeViewFor(medium));
     window.scrollTo({ top: 0 });
   }, [medium]);
 
@@ -190,6 +235,12 @@ export default function AjestApp() {
     window.scrollTo({ top: 0 });
   }, []);
 
+  // Drama Explore: full filtered drama listing (country/genre/status + sort)
+  const openDramaExplore = useCallback((preset?: DramaExplorePreset) => {
+    setView({ kind: 'drama-explore', preset });
+    window.scrollTo({ top: 0 });
+  }, []);
+
   // ── Medium switch — persists and resets to that medium's home ──
   const switchMedium = useCallback((m: Medium) => {
     setMedium(m);
@@ -199,7 +250,7 @@ export default function AjestApp() {
       /* storage unavailable — session-only */
     }
     setReaderIntent(null);
-    setView(m === 'manga' ? { kind: 'manga-home' } : m === 'drama' ? { kind: 'drama-home' } : { kind: 'home' });
+    setView(homeViewFor(m));
     window.scrollTo({ top: 0 });
   }, []);
 
@@ -293,7 +344,9 @@ export default function AjestApp() {
       : medium === 'drama'
         ? [
             { key: 'drama-home', label: 'Home', icon: <IconHome size={21} /> },
+            { key: 'drama-explore', label: 'Explore', icon: <IconFlame size={21} /> },
             { key: 'drama-search', label: 'Search', icon: <IconSearch size={21} /> },
+            { key: 'drama-history', label: 'My Dramas', icon: <IconClock size={21} /> },
           ]
         : [
             { key: 'home', label: 'Home', icon: <IconHome size={21} /> },
@@ -504,10 +557,16 @@ export default function AjestApp() {
         {/* ── K-drama / Asian drama (dramacool tier) ── */}
         {medium === 'drama' && view.kind === 'drama-home' && (
           <div className="mx-auto max-w-7xl md:px-8">
-            <DramaHome onOpen={openDrama} onPlay={playDrama} />
+            <DramaHome onOpen={openDrama} onPlay={playDrama} onExplore={openDramaExplore} />
           </div>
         )}
         {medium === 'drama' && view.kind === 'drama-search' && <DramaSearchView onOpen={openDrama} />}
+        {medium === 'drama' && view.kind === 'drama-explore' && (
+          <DramaExploreView key={JSON.stringify(view.preset || {})} preset={view.preset} onOpen={openDrama} />
+        )}
+        {medium === 'drama' && view.kind === 'drama-history' && (
+          <DramaHistoryView onOpen={openDrama} onPlay={playDrama} />
+        )}
         {medium === 'drama' && view.kind === 'drama-detail' && (
           <DramaDetail drama={view.drama} onBack={goHome} onPlay={playDrama} />
         )}

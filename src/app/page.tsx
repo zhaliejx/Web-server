@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { AjestErrorBoundary } from '@/components/ajest/AjestErrorBoundary';
 
 // Client-only: the app reads localStorage (user libraries + theme), so SSR
 // is intentionally skipped. Content renders immediately — no bootup screen.
@@ -32,5 +33,9 @@ const AjestApp = dynamic(() => import('@/components/ajest/AjestApp'), {
 });
 
 export default function Home() {
-  return <AjestApp />;
+  return (
+    <AjestErrorBoundary>
+      <AjestApp />
+    </AjestErrorBoundary>
+  );
 }
