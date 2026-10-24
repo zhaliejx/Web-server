@@ -47,6 +47,7 @@ function proxied(url: string): string {
 // Embedded sources are identity-masked in the UI — never reveal the upstream brand
 function providerLabel(p: string): string {
   if (p.startsWith('youtube')) return 'Official source';
+  if (p === 'myserver') return 'My server';
   if (p === 'anipm') return 'HD player';
   if (p === 'kaizen') return 'Kaizen mirror';
   if (p === 'dc-hls') return 'Direct stream';
@@ -473,7 +474,11 @@ export default function Player({
     setLevels([]);
     setActiveLevel(-1);
 
-    const url = proxied(src.url); // direct sources go through the proxy —
+    // My Server (self-hosted vault) plays DIRECTLY off our own worker — the
+    // Vercel proxy would burn serverless bandwidth on 100-500 MB episode
+    // files, and native <video> needs no CORS for playback. The worker ships
+    // Range support, so seeking works exactly like any mp4 host.
+    const url = src.provider === 'myserver' ? src.url : proxied(src.url); // direct sources go through the proxy —
     // googlevideo URLs are signed to our server IP and need Range passthrough
 
     const armWatchdog = () => {
