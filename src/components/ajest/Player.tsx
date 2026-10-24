@@ -64,14 +64,18 @@ function providerLabel(p: string): string {
   return p;
 }
 
-/** Drama hoster embeds run sandboxed: their own player UI and in-frame
- *  navigation keep working, but top-navigation hijacks and click-popups are
- *  blocked. ani.pm explicitly refuses sandboxed frames, so it (and Kaizen,
- *  whose Blogger shell may too) stay unsandboxed behind the redirect shield. */
-function embedSandbox(provider: string): string | undefined {
-  return provider.startsWith('dc-embed') || provider === 'mat'
-    ? 'allow-scripts allow-same-origin allow-forms allow-presentation'
-    : undefined;
+/** Drama hoster embeds run UNSANDBOXED — probed live 2026-10 with a 6-variant
+ *  matrix: streamtape's bot-heuristics flag ANY sandboxed frame ("Client
+ *  blocked! Your browser or the embed you are viewing are doing nasty
+ *  things!") while the SAME embed unsandboxed — same tab, same datacenter
+ *  IP — plays fine. The sandbox itself was the trigger (referrer policy was
+ *  irrelevant; extending the sandbox grant list didn't help either). So
+ *  hosters get their full own navigation (the user's explicit ask) and we
+ *  keep them contained the way Kaizen always has been: no sandbox, in-app
+ *  chrome on top. ani.pm additionally gets its guardrail shield because its
+ *  player top-navigates on tap. */
+function embedSandbox(_provider: string): string | undefined {
+  return undefined;
 }
 
 // ── ani.pm browser-side availability check ─────────────────────────────────
