@@ -1162,7 +1162,7 @@ export default function Player({
             <p className="mt-1 max-w-md text-xs leading-relaxed text-white/50">
               {dramaSlug
                 ? 'The drama mirror chain could not serve this episode. It may not be hosted yet — try another mirror or episode.'
-                : 'The provider chain (gogoanime.by → relay search) could not serve this episode. Recent simulcast episodes are usually hosted; older ones depend on source availability.'}
+                : 'The primary source could not serve this episode. Backup mirrors are OFF by default to save data — open Settings → Streaming sources and enable Direct streams / mirrors to widen coverage.'}
             </p>
           </div>
           {officialLinks.length > 0 && (

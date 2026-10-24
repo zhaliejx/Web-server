@@ -2,9 +2,16 @@
 
 // ── Source provider registry + user preferences (localStorage-backed) ───────
 // The streams resolver follows the chain: ani.pm → gogo → AnimeKaizen →
-// YouTube. Users can toggle any of them off, and the Player forwards the
-// enabled set to /api/streams so disabled tiers are never even contacted —
-// which also makes resolution faster.
+// YouTube. Users can toggle any of them, and the Player forwards the enabled
+// set to /api/streams so disabled tiers are never even contacted — which also
+// makes resolution faster.
+//
+// DEFAULTS: only the primary tier (ani.pm HD player) is enabled. Backup
+// mirrors stay OFF unless the user turns them on — direct-stream tiers relay
+// video through the server and would burn through the hosting plan's
+// bandwidth quota with a shared household of viewers. Embed tiers (kaizen,
+// youtube) cost nothing to enable, but off-by-default keeps every device on
+// the safe, predictable configuration.
 
 import { useCallback, useEffect, useState } from 'react';
 
@@ -31,45 +38,54 @@ export const PROVIDERS: Record<ProviderId, ProviderMeta> = {
   gogo: {
     id: 'gogo',
     label: 'Direct streams',
-    blurb: 'Real video files with Ajest controls — progress bar, resume, auto-next. Recent shows only.',
+    blurb: 'Real video files with Ajest controls — progress bar, resume, auto-next. Recent shows only. Off by default: heavy on server data.',
     kind: 'native',
     badge: 'Best experience',
   },
   kaizen: {
     id: 'kaizen',
     label: 'AnimeKaizen',
-    blurb: 'Google-hosted mirror for the latest episode of select shows. Zero-cost extra fallback.',
+    blurb: 'Google-hosted mirror for the latest episode of select shows. Zero-cost extra fallback. Off by default — free to enable.',
     kind: 'embed',
     badge: 'Mirror',
   },
   youtube: {
     id: 'youtube',
     label: 'Official channel uploads',
-    blurb: 'Full episodes from official anime channels (Muse Asia, Crunchyroll…). Region-dependent.',
+    blurb: 'Full episodes from official anime channels (Muse Asia, Crunchyroll…). Region-dependent. Off by default — free to enable.',
     kind: 'native',
     badge: 'Legit',
   },
 };
 
-const LS_KEY = 'ajest-sources-v1';
+/** Tiers off unless the user explicitly enables them — everything but the
+ *  primary ani.pm tier. Direct tiers relay video through the server, so a
+ *  10-viewer household on always-on defaults would exhaust the monthly
+ *  bandwidth quota in weeks. */
+export const DEFAULT_DISABLED: ProviderId[] = ['gogo', 'kaizen', 'youtube'];
+
+// v2: bumped so existing devices (which stored "everything enabled") pick up
+// the family-safe defaults on their next visit.
+const LS_KEY = 'ajest-sources-v2';
 
 export interface SourcePrefs {
   disabled: ProviderId[];
 }
 
 export function loadSourcePrefs(): SourcePrefs {
-  if (typeof window === 'undefined') return { disabled: [] };
+  if (typeof window === 'undefined') return { disabled: DEFAULT_DISABLED };
   try {
     const raw = window.localStorage.getItem(LS_KEY);
-    if (!raw) return { disabled: [] };
+    if (!raw) return { disabled: DEFAULT_DISABLED };
     const p = JSON.parse(raw) as SourcePrefs;
     const disabled = Array.isArray(p.disabled)
       ? p.disabled.filter((d): d is ProviderId => (PROVIDER_ORDER as readonly string[]).includes(d))
       : [];
-    // Never allow disabling everything — gogo+anipm minimum one must stay
-    return { disabled: disabled.length >= PROVIDER_ORDER.length ? [] : disabled };
+    // Never allow disabling everything — if somehow everything is off, fall
+    // back to the safe defaults (primary on) instead of re-enabling relays.
+    return { disabled: disabled.length >= PROVIDER_ORDER.length ? DEFAULT_DISABLED : disabled };
   } catch {
-    return { disabled: [] };
+    return { disabled: DEFAULT_DISABLED };
   }
 }
 
@@ -117,8 +133,8 @@ export function useSourcePrefs(): {
     }
   }, []);
   const reset = useCallback(() => {
-    saveSourcePrefs({ disabled: [] });
-    setDisabled([]);
+    saveSourcePrefs({ disabled: DEFAULT_DISABLED });
+    setDisabled(DEFAULT_DISABLED);
   }, []);
   return { disabled, toggle, reset };
 }

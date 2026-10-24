@@ -116,9 +116,10 @@ export function SourceSettings({ open, onClose }: { open: boolean; onClose: () =
             Streaming sources
           </h3>
           <p className="px-3 pb-2 text-[11.5px] leading-snug text-white/45">
-            Ajest follows the chain ani.pm → gogo → AnimeKaizen → YouTube.
-            Turn off what you don&apos;t want — disabled sources are skipped
-            instantly.
+            Chain: ani.pm → gogo → AnimeKaizen → YouTube. Only the primary
+            HD player is on by default — backup mirrors stay off to keep data
+            usage tiny. Turn them on anytime; AnimeKaizen and YouTube cost
+            nothing extra, while Direct streams relay video through the server.
           </p>
           <ul className="flex flex-col divide-y divide-white/[0.05]">
             {PROVIDER_ORDER.map((id) => {
